@@ -1,6 +1,7 @@
 package main
 
 import (
+	. "github.com/Phantomvv1/Library_management/internal/authentication"
 	. "github.com/Phantomvv1/Library_management/internal/books"
 	. "github.com/Phantomvv1/Library_management/internal/librarians"
 	. "github.com/Phantomvv1/Library_management/internal/users"
@@ -12,7 +13,9 @@ func main() {
 	r.GET("/users", GetUsers)
 	r.GET("/books", GetBooks)
 	r.GET("/librarians", GetLibrarians)
+	r.POST("/librarians", CreateLibrarian)
 	r.POST("/book", AddBook)
+	r.POST("/log", LogIn)
 
 	r.Run(":42069")
 }

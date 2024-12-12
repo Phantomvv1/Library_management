@@ -71,7 +71,7 @@ func AddBook(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
 	}
 
-	_, err = conn.Exec(context.Background(), "insert into books (name, isbn, title, author, year) values ($1, $2, $3, $4, $5)",
+	_, err = conn.Exec(context.Background(), "insert into books (name, isbn, title, author, year) values ($1, $2, $3, $4, $5);",
 		book.Name, book.ISBN, book.Title, book.Author, book.Year)
 	if err != nil {
 		log.Println(err)
