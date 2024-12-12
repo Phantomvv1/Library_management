@@ -12,6 +12,7 @@ func main() {
 	r.GET("/users", GetUsers)
 	r.GET("/books", GetBooks)
 	r.GET("/librarians", GetLibrarians)
+	r.POST("/book", AddBook)
 
 	r.Run(":42069")
 }

@@ -2,6 +2,7 @@ package books
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -51,4 +52,31 @@ func GetBooks(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"books": bookList})
+}
+
+func AddBook(c *gin.Context) {
+	var book Book
+	json.NewDecoder(c.Request.Body).Decode(&book)
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error connecting to the database"})
+	}
+	defer conn.Close(context.Background())
+
+	_, err = conn.Exec(context.Background(), "create table if not exists books (id primary key serial, name text, isbn text, title text, author text, year text);")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+	}
+
+	_, err = conn.Exec(context.Background(), "insert into books (name, isbn, title, author, year) values ($1, $2, $3, $4, $5)",
+		book.Name, book.ISBN, book.Title, book.Author, book.Year)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't insert into the table"})
+	}
+
+	c.JSON(http.StatusOK, nil)
 }
