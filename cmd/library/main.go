@@ -15,7 +15,8 @@ func main() {
 	r.GET("/librarians", GetLibrarians)
 	r.POST("/librarians", CreateLibrarian)
 	r.POST("/book", AddBook)
-	r.POST("/log", LogIn)
+	r.POST("/signup", SignUp)
+	r.POST("/login", LogIn)
 
 	r.Run(":42069")
 }
