@@ -34,11 +34,16 @@ func GetLibrarians(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	var userList []Librarians
-	rows, err := conn.Query(context.Background(), "select id, email, name from librarians;")
+	rows, err := conn.Query(context.Background(), "select id, email, name from authentication where type = 'librarian';")
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't read from the database"})
-		return
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusNoContent, gin.H{"error": "There are no librarians"})
+			return
+		} else {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't read from the database"})
+			return
+		}
 	}
 
 	for rows.Next() {
@@ -59,34 +64,4 @@ func GetLibrarians(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"users": userList})
-}
-
-func CreateLibrarian(c *gin.Context) {
-	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
-	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection failed"})
-		return
-	}
-	defer conn.Close(context.Background())
-
-	var librarian LibrariansCreate
-	json.NewDecoder(c.Request.Body).Decode(&librarian)
-
-	_, err = conn.Exec(context.Background(), "create table if not exists librarians (id primary key serial, name text, email text, password);")
-	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
-		return
-	}
-
-	_, err = conn.Exec(context.Background(), "insert into librarians (name, email, password) values ($1, $2, $3, $4, $5);",
-		librarian.Name, librarian.Email)
-	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't insert into the table"})
-		return
-	}
-
-	c.JSON(http.StatusOK, nil)
 }

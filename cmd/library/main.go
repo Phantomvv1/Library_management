@@ -17,6 +17,7 @@ func main() {
 	r.POST("/book", AddBook)
 	r.POST("/signup", SignUp)
 	r.POST("/login", LogIn)
+	r.POST("/searchbook", SearchForBook)
 
 	r.Run(":42069")
 }

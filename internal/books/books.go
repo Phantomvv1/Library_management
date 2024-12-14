@@ -70,7 +70,7 @@ func GetBooks(c *gin.Context) {
 
 func AddBook(c *gin.Context) {
 	var book Book
-	json.NewDecoder(c.Request.Body).Decode(&book)
+	json.NewDecoder(c.Request.Body).Decode(&book) //name, isbn, title, author, year
 
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
@@ -107,7 +107,7 @@ func SearchForBook(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	var information map[string]string
-	json.NewDecoder(c.Request.Body).Decode(&information) // name
+	json.NewDecoder(c.Request.Body).Decode(&information) //name
 
 	bookList, err := getBooks(conn)
 	if err != nil {

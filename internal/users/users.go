@@ -2,6 +2,7 @@ package users
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -26,7 +27,7 @@ func GetUsers(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	var userList []Users
-	rows, err := conn.Query(context.Background(), "select id, email, name from users;")
+	rows, err := conn.Query(context.Background(), "select id, email, name from authentication where type = 'user';")
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't read from the database"})
