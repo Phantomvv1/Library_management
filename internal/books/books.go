@@ -98,7 +98,7 @@ func AddBook(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func BorrowBook(c *gin.Context) {
+func SearchForBook(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
