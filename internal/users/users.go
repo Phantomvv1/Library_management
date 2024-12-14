@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 
+	. "github.com/Phantomvv1/Library_management/internal/authentication"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 )
@@ -52,4 +53,12 @@ func GetUsers(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"users": userList})
+}
+
+func EditProfile(c *gin.Context) {
+	var edit Users
+	json.NewDecoder(c.Request.Body).Decode(&edit) //name, email
+
+	CurrentPrfile.Name = edit.Name
+	CurrentPrfile.Email = edit.Email
 }

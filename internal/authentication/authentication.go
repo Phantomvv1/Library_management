@@ -14,9 +14,11 @@ import (
 )
 
 type Profile struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
-	Type  string `json:"type"`
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	Type    string `json:"type"`
+	History string `json:"history"`
 }
 
 var CurrentPrfile Profile
@@ -39,7 +41,7 @@ func SignUp(c *gin.Context) {
 	var information map[string]string
 	json.NewDecoder(c.Request.Body).Decode(&information) //name, email, password, type
 
-	_, err = conn.Exec(context.Background(), "create table if not exists authentication (id primary key serial not null, name text, email text, password text, type text);")
+	_, err = conn.Exec(context.Background(), "create table if not exists authentication (id primary key serial not null, name text, email text, password text, type text, history text);")
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for authentication"})
@@ -66,7 +68,7 @@ func SignUp(c *gin.Context) {
 	}
 
 	hashedPassword := SHA512(information["password"])
-	_, err = conn.Exec(context.Background(), "insert into authentication (name, email, password, type) values ($1, $2, $3);",
+	_, err = conn.Exec(context.Background(), "insert into authentication (name, email, password, type, history) values ($1, $2, $3, $4, null);",
 		information["name"], information["email"], hashedPassword, information["type"])
 	if err != nil {
 		log.Println(err)
@@ -88,8 +90,10 @@ func LogIn(c *gin.Context) {
 	var information map[string]string
 	json.NewDecoder(c.Request.Body).Decode(&information) //email, password
 
-	var passwordCheck, name, email, typeOfAccount string
-	err = conn.QueryRow(context.Background(), "select password, name, type, email from authentication a where a.email = $1;", information["email"]).Scan(&passwordCheck, &name, &typeOfAccount, &email)
+	var passwordCheck, name, email, typeOfAccount, history string
+	var id int
+	err = conn.QueryRow(context.Background(), "select password, name, type, email, history, id from authentication a where a.email = $1;", information["email"]).Scan(
+		&passwordCheck, &name, &typeOfAccount, &email, &history, &id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			log.Println(err)
@@ -108,8 +112,10 @@ func LogIn(c *gin.Context) {
 		return
 	}
 
+	CurrentPrfile.ID = id
 	CurrentPrfile.Name = name
 	CurrentPrfile.Email = email
 	CurrentPrfile.Type = typeOfAccount
+	CurrentPrfile.History = history
 	c.JSON(http.StatusOK, nil)
 }
