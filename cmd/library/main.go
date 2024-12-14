@@ -13,7 +13,6 @@ func main() {
 	r.GET("/users", GetUsers)
 	r.GET("/books", GetBooks)
 	r.GET("/librarians", GetLibrarians)
-	r.POST("/librarians", CreateLibrarian)
 	r.POST("/book", AddBook)
 	r.POST("/signup", SignUp)
 	r.POST("/login", LogIn)
