@@ -33,6 +33,7 @@ func SignUp(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Databse connection failed"})
+		return
 	}
 
 	var information map[string]string
@@ -42,6 +43,7 @@ func SignUp(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for authentication"})
+		return
 	}
 
 	var check string
@@ -53,12 +55,14 @@ func SignUp(c *gin.Context) {
 		} else {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the password from the table"})
+			return
 		}
 	}
 
 	if emailExists {
 		log.Println(err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "There is already a person with this email"})
+		return
 	}
 
 	hashedPassword := SHA512(information["password"])
@@ -67,6 +71,7 @@ func SignUp(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inserting the information into the database."})
+		return
 	}
 
 	c.JSON(http.StatusOK, nil)
@@ -77,6 +82,7 @@ func LogIn(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection failed"})
+		return
 	}
 
 	var information map[string]string
@@ -88,15 +94,18 @@ func LogIn(c *gin.Context) {
 		if err == pgx.ErrNoRows {
 			log.Println(err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "There isn't anybody registered with this email!"})
+			return
 		} else {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while trying to log in"})
+			return
 		}
 	}
 
 	if SHA512(information["password"]) != passwordCheck {
 		log.Println("Wrong password")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Wrong password"})
+		return
 	}
 
 	CurrentPrfile.Name = name

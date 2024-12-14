@@ -21,6 +21,7 @@ func GetUsers(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection failed"})
+		return
 	}
 	defer conn.Close(context.Background())
 
@@ -29,6 +30,7 @@ func GetUsers(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't read from the database"})
+		return
 	}
 
 	for rows.Next() {
@@ -37,6 +39,7 @@ func GetUsers(c *gin.Context) {
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process users"})
+			return
 		}
 		userList = append(userList, user)
 	}
@@ -44,6 +47,7 @@ func GetUsers(c *gin.Context) {
 	if rows.Err() != nil {
 		log.Println(rows.Err())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"users": userList})

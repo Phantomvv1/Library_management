@@ -29,6 +29,7 @@ func GetLibrarians(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection failed"})
+		return
 	}
 	defer conn.Close(context.Background())
 
@@ -37,6 +38,7 @@ func GetLibrarians(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Can't read from the database"})
+		return
 	}
 
 	for rows.Next() {
@@ -45,6 +47,7 @@ func GetLibrarians(c *gin.Context) {
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process librarians"})
+			return
 		}
 		userList = append(userList, user)
 	}
@@ -52,6 +55,7 @@ func GetLibrarians(c *gin.Context) {
 	if rows.Err() != nil {
 		log.Println(rows.Err())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch librarians"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"users": userList})
@@ -62,6 +66,7 @@ func CreateLibrarian(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection failed"})
+		return
 	}
 	defer conn.Close(context.Background())
 
@@ -72,6 +77,7 @@ func CreateLibrarian(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		return
 	}
 
 	_, err = conn.Exec(context.Background(), "insert into librarians (name, email, password) values ($1, $2, $3, $4, $5);",
@@ -79,6 +85,7 @@ func CreateLibrarian(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't insert into the table"})
+		return
 	}
 
 	c.JSON(http.StatusOK, nil)
