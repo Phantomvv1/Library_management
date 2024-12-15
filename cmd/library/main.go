@@ -13,6 +13,7 @@ func main() {
 	r.GET("/users", GetUsers)
 	r.GET("/books", GetBooks)
 	r.GET("/librarians", GetLibrarians)
+	r.GET("/history", GetHistory)
 	r.POST("/book", AddBook)
 	r.POST("/signup", SignUp)
 	r.POST("/login", LogIn)
@@ -20,6 +21,7 @@ func main() {
 	r.POST("/edit", EditProfile)
 	r.POST("/book/borrow", BorrowBook)
 	r.POST("/book/return", ReturnBook)
+	r.POST("/book/reserve", ReserveBook)
 
 	r.Run(":42069")
 }
