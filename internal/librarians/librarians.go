@@ -30,6 +30,7 @@ type Event struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+	Start       string `json:"start"`
 }
 
 func GetLibrarians(c *gin.Context) {
@@ -87,7 +88,7 @@ func CreateEvent(c *gin.Context) {
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "create table if not exists events (id primary key serial not null, name text, description text, invited text);")
+	_, err = conn.Exec(context.Background(), "create table if not exists events (id primary key serial not null, name text, description text, invited text, start timestamp);")
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error createing a table for the events"})
@@ -95,13 +96,13 @@ func CreateEvent(c *gin.Context) {
 	}
 
 	var event Event
-	json.NewDecoder(c.Request.Body).Decode(&event) //name (descrpition not neccessary)
+	json.NewDecoder(c.Request.Body).Decode(&event) //name && start (descrpition not neccessary)
 	if event.Name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Error no name provided"})
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "insert into events (name, description, invited) ($1, $2, NULL);", event.Name, event.Description)
+	_, err = conn.Exec(context.Background(), "insert into events (name, description, invited, start) ($1, $2, NULL, $3);", event.Name, event.Description, event.Start)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating the event"})
