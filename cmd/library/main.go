@@ -22,6 +22,8 @@ func main() {
 	r.POST("/book/borrow", BorrowBook)
 	r.POST("/book/return", ReturnBook)
 	r.POST("/book/reserve", ReserveBook)
+	r.POST("/event", CreateEvent)
+	r.POST("event/invite", InviteToEvent)
 
 	r.Run(":42069")
 }

@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-type Users struct {
+type User struct {
 	Name  string `json:"name"`
 	Email string `json:"email"`
 	ID    int    `json:"id"`
@@ -27,7 +27,7 @@ func GetUsers(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	var userList []Users
+	var userList []User
 	rows, err := conn.Query(context.Background(), "select id, email, name from authentication where type = 'user';")
 	if err != nil {
 		log.Println(err)
@@ -36,7 +36,7 @@ func GetUsers(c *gin.Context) {
 	}
 
 	for rows.Next() {
-		var user Users
+		var user User
 		err = rows.Scan(&user.ID, &user.Email, &user.Name)
 		if err != nil {
 			log.Println(err)
@@ -56,7 +56,7 @@ func GetUsers(c *gin.Context) {
 }
 
 func EditProfile(c *gin.Context) {
-	var edit Users
+	var edit User
 	json.NewDecoder(c.Request.Body).Decode(&edit) //name, email
 
 	CurrentPrfile.Name = edit.Name
