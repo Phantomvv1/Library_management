@@ -20,12 +20,12 @@ type Book struct {
 	Title    string `json:"title"`
 	Author   string `json:"author"`
 	Year     uint   `json:"year"`
-	Borrowed bool   `json:"borrowed"`
+	Quantity int    `json:"quantity"`
 }
 
 func getBooks(conn *pgx.Conn) ([]Book, error) {
 	var bookList []Book
-	rows, err := conn.Query(context.Background(), "select isbn, title, author, year, borrowed from books;")
+	rows, err := conn.Query(context.Background(), "select isbn, title, author, year, quantity from books;")
 	if err != nil {
 		log.Println(err)
 		return nil, errors.New("Failed to fetch books")
@@ -33,7 +33,7 @@ func getBooks(conn *pgx.Conn) ([]Book, error) {
 
 	for rows.Next() {
 		var book Book
-		err = rows.Scan(&book.ID, &book.ISBN, &book.Title, &book.Author, &book.Year, &book.Borrowed)
+		err = rows.Scan(&book.ID, &book.ISBN, &book.Title, &book.Author, &book.Year, &book.Quantity)
 		if err != nil {
 			log.Println(err)
 			return nil, errors.New("Failed to process books")
@@ -69,8 +69,14 @@ func GetBooks(c *gin.Context) {
 }
 
 func AddBook(c *gin.Context) {
+	if CurrentPrfile.Type != "librarian" {
+		log.Println("Users can't add books")
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error users can't add books"})
+		return
+	}
+
 	var book Book
-	json.NewDecoder(c.Request.Body).Decode(&book) //name, isbn, title, author, year
+	json.NewDecoder(c.Request.Body).Decode(&book) //name, isbn, title, author, year, quantity
 
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
@@ -81,15 +87,15 @@ func AddBook(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	_, err = conn.Exec(context.Background(), "create table if not exists books (id primary key serial, isbn text, title text, author text, year text, "+
-		"borrowed boolean, reserved_from_id foreign key int);")
+		"reserved_from_id foreign key int, quantity int);")
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "insert into books (name, isbn, title, author, year, borrowed, reserved_from_id) values ($1, $2, $3, $4, false, 0);",
-		book.ISBN, book.Title, book.Author, book.Year)
+	_, err = conn.Exec(context.Background(), "insert into books (isbn, title, author, year, quantity) values ($1, $2, $3, $4, false, 0, $5);",
+		book.ISBN, book.Title, book.Author, book.Year, book.Quantity)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't insert into the table"})
@@ -112,6 +118,7 @@ func SearchForBook(c *gin.Context) {
 
 	bookList, err := getBooks(conn)
 	if err != nil {
+		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
@@ -150,37 +157,30 @@ func BorrowBook(c *gin.Context) {
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&book) //title & (author | isbn | year | id)
 
-	err = conn.QueryRow(context.Background(), "select id, title, author, year, isbn, borrowed from books b where b.title = $1", book.Title).Scan(
-		&book.ID, &book.Title, &book.Author, &book.Year, &book.ISBN, &book.Borrowed)
+	err = conn.QueryRow(context.Background(), "update books b set b.quantity = b.quantity - 1 where b.title = $1;", book.Title).Scan(
+		&book.ID, &book.Title, &book.Author, &book.Year, &book.ISBN, &book.Quantity)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the book"})
 		return
 	}
 
-	if book.Borrowed {
-		log.Println("This book has already been borrowed. Please chose another one.")
+	if book.Quantity == 0 {
+		log.Println("All of the copies of this book have already been borrowed. Please chose another one.")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Trying to borrow an already borrowed book"})
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "update books set borrowed = true, where id = $1", book.ID)
-	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the database"})
-		return
-	}
-
 	var history string
-	err = conn.QueryRow(context.Background(), "select history from authentication a where a.id = $1", CurrentPrfile.ID).Scan(&history)
+	err = conn.QueryRow(context.Background(), "select history from authentication a where a.id = $1;", CurrentPrfile.ID).Scan(&history)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the database"})
 		return
 	}
-	history = history + " " + book.Title
+	history = history + ", " + book.Title
 
-	_, err = conn.Exec(context.Background(), "update authentication a set history = $1 where a.id = $2", history, CurrentPrfile.ID)
+	_, err = conn.Exec(context.Background(), "update authentication a set history = $1 where a.id = $2;", history, CurrentPrfile.ID)
 
 	c.JSON(http.StatusOK, nil)
 }
@@ -197,17 +197,15 @@ func ReturnBook(c *gin.Context) {
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&book) //title & (author | isbn | year | id)
 
-	err = conn.QueryRow(context.Background(), "select id, title, author, year, isbn, borrowed from books b where b.title = $1", book.Title).Scan(
-		&book.ID, &book.Title, &book.Author, &book.Year, &book.ISBN, &book.Borrowed)
-
-	if !book.Borrowed {
-		log.Println("This book is not borrowed. Please chose another one.")
-		c.JSON(http.StatusForbidden, gin.H{"error": "Trying to return a not borrowed book"})
-		return
+	err = conn.QueryRow(context.Background(), "update books b set b.quantity = b.quantity + 1 where b.title = $1;", book.Title).Scan(
+		&book.ID, &book.Title, &book.Author, &book.Year, &book.ISBN, &book.Quantity)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error returning the book"})
 	}
 
 	var reserved_id int
-	err = conn.QueryRow(context.Background(), "select reserved_from_id from books b where b.title = $1", book.Title).Scan(&reserved_id)
+	err = conn.QueryRow(context.Background(), "select reserved_from_id from books b where b.title = $1;", book.Title).Scan(&reserved_id)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking if teh book is reserved"})
@@ -215,14 +213,19 @@ func ReturnBook(c *gin.Context) {
 	}
 
 	if reserved_id == 0 {
-		_, err = conn.Exec(context.Background(), "update books set borrowed = false where id = $1", book.ID)
+		_, err = conn.Exec(context.Background(), "update books b set b.quantity = b.quantity + 1 where id = $1;", book.ID)
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the database"})
 			return
 		}
 	} else {
-		_, err = conn.Exec(context.Background(), "update authentication a set a.history = concat(a.history, ' ', $1) where a.id = $2", book.Title, reserved_id)
+		_, err = conn.Exec(context.Background(), "update authentication a set a.history = a.history || ', ' || $1 where a.id = $2;", book.Title, reserved_id)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the history of this person"})
+			return
+		}
 	}
 
 	c.JSON(http.StatusOK, nil)
@@ -244,11 +247,64 @@ func ReserveBook(c *gin.Context) {
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&book) //title & (author | isbn | year | id)
 
-	err = conn.QueryRow(context.Background(), "update books set reserved_from_id = $1 from books b where b.title = $2", CurrentPrfile.ID, book.Title).Scan(
-		&book.ID, &book.Title, &book.Author, &book.Year, &book.ISBN, &book.Borrowed)
+	_, err = conn.Exec(context.Background(), "update books set reserved_from_id = $1 from books b where b.title = $2;", CurrentPrfile.ID, book.Title)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reserving the book"})
+		return
+	}
+
+	c.JSON(http.StatusOK, nil)
+}
+
+func UpdateBookQuantity(c *gin.Context) {
+	if CurrentPrfile.Type != "librarian" {
+		log.Println("Users can't update the quantity of books")
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error users can't update the quantity of books"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error connecting to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	var book Book
+	json.NewDecoder(c.Request.Body).Decode(&book) // id && quantity
+	_, err = conn.Exec(context.Background(), "update books b set b.quantity = $1 where b.id = $2;", book.Quantity, book.ID)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the quantity of books"})
+		return
+	}
+
+	c.JSON(http.StatusOK, nil)
+}
+
+func RemoveBook(c *gin.Context) {
+	if CurrentPrfile.Type != "librarian" {
+		log.Println("Users can't remove books")
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error users can't remove books"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error connecting to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	var book Book
+	json.NewDecoder(c.Request.Body).Decode(&book) // id && (title || description)
+	_, err = conn.Exec(context.Background(), "delete from books b where b.id = $1", book.ID)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error removing the book"})
 		return
 	}
 

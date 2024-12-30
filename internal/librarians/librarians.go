@@ -30,7 +30,7 @@ type Event struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	Start       string `json:"start"`
+	Start       string `json:"start"` // Example: 1999-01-08 04:05:06
 }
 
 func GetLibrarians(c *gin.Context) {
@@ -87,6 +87,7 @@ func CreateEvent(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to connect to the database"})
 		return
 	}
+	defer conn.Close(context.Background())
 
 	_, err = conn.Exec(context.Background(), "create table if not exists events (id primary key serial not null, name text, description text, invited text, start timestamp);")
 	if err != nil {
@@ -124,6 +125,7 @@ func InviteToEvent(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to connect to the database"})
 		return
 	}
+	defer conn.Close(context.Background())
 
 	var user User
 	json.NewDecoder(c.Request.Body).Decode(&user) // email && (id || name)
@@ -142,7 +144,7 @@ func InviteToEvent(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inviting the person"})
 		return
 	}
-	invited = invited + " " + user.Email
+	invited = invited + ", " + user.Email
 
 	_, err = conn.Exec(context.Background(), "update events set invited = $1;", invited)
 	if err != nil {
@@ -152,4 +154,113 @@ func InviteToEvent(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, nil)
+}
+
+func GetInvited(c *gin.Context) {
+	if CurrentPrfile.Type != "librarian" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can create events"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	var event Event
+	json.NewDecoder(c.Request.Body).Decode(&event) // name && (description || start)
+	var invited string
+	err = conn.QueryRow(context.Background(), "select invited from events where name = $1;", event.Name).Scan(&invited)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error there is no event with this name"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"people invited": invited})
+}
+
+func GetEvents(c *gin.Context) {
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	rows, err := conn.Query(context.Background(), "select id, name, description, start from events")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the events from the database"})
+		return
+	}
+
+	var events []Event
+	for rows.Next() {
+		var event Event
+		err = rows.Scan(&event.ID, &event.Name, &event.Description, &event.Start)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error collecting all the events"})
+			return
+		}
+
+		events = append(events, event)
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": rows.Err()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"events": events})
+}
+
+func ViewUserHistory(c *gin.Context) {
+	if CurrentPrfile.Type != "librarian" {
+		log.Println("Only librarians can view the history of users")
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can view the history of users"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	rows, err := conn.Query(context.Background(), "select name, email, history from authentication a where a.type = 'user';")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the users' history"})
+		return
+	}
+
+	var profiles []Profile
+	for rows.Next() {
+		var profile Profile
+		err = rows.Scan(&profile.Name, &profile.Email, &profile.History)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the users' history"})
+			return
+		}
+
+		profiles = append(profiles, profile)
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the users' history"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"user history": profiles})
 }
