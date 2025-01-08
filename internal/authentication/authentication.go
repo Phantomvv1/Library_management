@@ -32,7 +32,7 @@ func SHA512(text string) string {
 }
 
 func SignUp(c *gin.Context) {
-	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABSE_URL"))
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Databse connection failed"})
@@ -42,7 +42,7 @@ func SignUp(c *gin.Context) {
 	var information map[string]string
 	json.NewDecoder(c.Request.Body).Decode(&information) //name, email, password, type
 
-	_, err = conn.Exec(context.Background(), "create table if not exists authentication (id serial primary key, not null, name text, email text, password text, type text, history text);")
+	_, err = conn.Exec(context.Background(), "create table if not exists authentication (id serial primary key, name text, email text, password text, type text, history text);")
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for authentication"})
@@ -69,7 +69,7 @@ func SignUp(c *gin.Context) {
 	}
 
 	hashedPassword := SHA512(information["password"])
-	_, err = conn.Exec(context.Background(), "insert into authentication (name, email, password, type, history) values ($1, $2, $3, $4, null);",
+	_, err = conn.Exec(context.Background(), "insert into authentication (name, email, password, type, history) values ($1, $2, $3, $4, ' ');",
 		information["name"], information["email"], hashedPassword, information["type"])
 	if err != nil {
 		log.Println(err)
@@ -81,7 +81,7 @@ func SignUp(c *gin.Context) {
 }
 
 func LogIn(c *gin.Context) {
-	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABSE_URL"))
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection failed"})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -25,7 +26,7 @@ type Book struct {
 
 func getBooks(conn *pgx.Conn) ([]Book, error) {
 	var bookList []Book
-	rows, err := conn.Query(context.Background(), "select isbn, title, author, year, quantity from books;")
+	rows, err := conn.Query(context.Background(), "select id, isbn, title, author, year, quantity from books;")
 	if err != nil {
 		log.Println(err)
 		return nil, errors.New("Failed to fetch books")
@@ -59,7 +60,7 @@ func GetBooks(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year text, "+
+	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
 		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
 	if err != nil {
 		log.Println(err)
@@ -89,7 +90,7 @@ func AddBook(c *gin.Context) {
 	}
 
 	var book Book
-	json.NewDecoder(c.Request.Body).Decode(&book) //name, isbn, title, author, year, quantity
+	json.NewDecoder(c.Request.Body).Decode(&book) //isbn, title, author, year, quantity
 
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
@@ -99,15 +100,16 @@ func AddBook(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year text, "+
-		"reserved_from_id foreign key int, quantity int);")
+	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
+		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "insert into books (isbn, title, author, year, quantity) values ($1, $2, $3, $4, false, 0, $5);",
+	fmt.Println(book)
+	_, err = conn.Exec(context.Background(), "insert into books (isbn, title, author, year, quantity) values ($1, $2, $3, $4, $5);",
 		book.ISBN, book.Title, book.Author, book.Year, book.Quantity)
 	if err != nil {
 		log.Println(err)
@@ -126,6 +128,14 @@ func SearchForBook(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
+	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
+		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		return
+	}
+
 	var information map[string]string
 	json.NewDecoder(c.Request.Body).Decode(&information) //name
 
@@ -138,7 +148,7 @@ func SearchForBook(c *gin.Context) {
 
 	var matchedNames []string
 	for _, book := range bookList {
-		foundMatch, err := regexp.MatchString("%"+information["name"]+"%", book.Title)
+		foundMatch, err := regexp.MatchString(".*"+information["name"]+".*", book.Title)
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err})
@@ -151,6 +161,7 @@ func SearchForBook(c *gin.Context) {
 	}
 
 	if matchedNames == nil {
+		log.Println("Couldn't find books with the name provided")
 		c.JSON(http.StatusNotFound, gin.H{"error": "Couldn't find books with the name provided"})
 		return
 	}
@@ -166,6 +177,14 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 	defer conn.Close(context.Background())
+
+	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
+		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		return
+	}
 
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&book) //title & (author | isbn | year | id)
@@ -206,6 +225,14 @@ func ReturnBook(c *gin.Context) {
 		return
 	}
 	defer conn.Close(context.Background())
+
+	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
+		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		return
+	}
 
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&book) //title & (author | isbn | year | id)
@@ -257,6 +284,14 @@ func ReserveBook(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
+	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
+		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		return
+	}
+
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&book) //title & (author | isbn | year | id)
 
@@ -285,6 +320,14 @@ func UpdateBookQuantity(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
+	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
+		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		return
+	}
+
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&book) // id && quantity
 	_, err = conn.Exec(context.Background(), "update books b set b.quantity = $1 where b.id = $2;", book.Quantity, book.ID)
@@ -311,6 +354,14 @@ func RemoveBook(c *gin.Context) {
 		return
 	}
 	defer conn.Close(context.Background())
+
+	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
+		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		return
+	}
 
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&book) // id && (title || description)

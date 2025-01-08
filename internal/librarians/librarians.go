@@ -222,10 +222,10 @@ func GetEvents(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	// NOTE: Creating the table if it doesn't exist
-	_, err = conn.Exec(context.Background(), "create table if not exists events (id primary key serial not null, name text, description text, invited text, start timestamp);")
+	_, err = conn.Exec(context.Background(), "create table if not exists events (id serial primary key not null, name text, description text, invited text, start timestamp);")
 	if err != nil {
 		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error createing a table for the events"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for the events"})
 		return
 	}
 
@@ -255,6 +255,11 @@ func GetEvents(c *gin.Context) {
 		return
 	}
 
+	if events == nil {
+		log.Println("There are no events created")
+		c.JSON(http.StatusNotFound, gin.H{"error": "There are no events created"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"events": events})
 }
 
