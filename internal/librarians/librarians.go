@@ -42,7 +42,15 @@ func GetLibrarians(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	var userList []Librarian
+	// NOTE: Creating the table if it doesn't exist
+	_, err = conn.Exec(context.Background(), "create table if not exists authentication (id serial primary key not null, name text, email text, password text, type text, history text);")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for authentication"})
+		return
+	}
+
+	var librarianList []Librarian
 	rows, err := conn.Query(context.Background(), "select id, email, name from authentication where type = 'librarian';")
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -63,7 +71,7 @@ func GetLibrarians(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process librarians"})
 			return
 		}
-		userList = append(userList, user)
+		librarianList = append(librarianList, user)
 	}
 
 	if rows.Err() != nil {
@@ -72,7 +80,12 @@ func GetLibrarians(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"users": userList})
+	if librarianList == nil {
+		log.Println("There are no librarians created.")
+		c.JSON(http.StatusNotFound, gin.H{"error": "There are no librarians"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"librarians": librarianList})
 }
 
 func CreateEvent(c *gin.Context) {
@@ -127,6 +140,14 @@ func InviteToEvent(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
+	// NOTE: Creating the table if it doesn't exist
+	_, err = conn.Exec(context.Background(), "create table if not exists events (id primary key serial not null, name text, description text, invited text, start timestamp);")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error createing a table for the events"})
+		return
+	}
+
 	var user User
 	json.NewDecoder(c.Request.Body).Decode(&user) // email && (id || name)
 
@@ -158,7 +179,7 @@ func InviteToEvent(c *gin.Context) {
 
 func GetInvited(c *gin.Context) {
 	if CurrentPrfile.Type != "librarian" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can create events"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can view who is invited to an event"})
 		return
 	}
 
@@ -169,6 +190,14 @@ func GetInvited(c *gin.Context) {
 		return
 	}
 	defer conn.Close(context.Background())
+
+	// NOTE: Creating the table if it doesn't exist
+	_, err = conn.Exec(context.Background(), "create table if not exists events (id primary key serial not null, name text, description text, invited text, start timestamp);")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error createing a table for the events"})
+		return
+	}
 
 	var event Event
 	json.NewDecoder(c.Request.Body).Decode(&event) // name && (description || start)
@@ -191,6 +220,14 @@ func GetEvents(c *gin.Context) {
 		return
 	}
 	defer conn.Close(context.Background())
+
+	// NOTE: Creating the table if it doesn't exist
+	_, err = conn.Exec(context.Background(), "create table if not exists events (id primary key serial not null, name text, description text, invited text, start timestamp);")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error createing a table for the events"})
+		return
+	}
 
 	rows, err := conn.Query(context.Background(), "select id, name, description, start from events")
 	if err != nil {

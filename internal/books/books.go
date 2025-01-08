@@ -59,12 +59,25 @@ func GetBooks(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
+	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year text, "+
+		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		return
+	}
+
 	bookList, err := getBooks(conn)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
+	if bookList == nil {
+		log.Println("There are no books created")
+		c.JSON(http.StatusNotFound, gin.H{"error": "There are no books created"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"books": bookList})
 }
 
@@ -86,7 +99,7 @@ func AddBook(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists books (id primary key serial, isbn text, title text, author text, year text, "+
+	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year text, "+
 		"reserved_from_id foreign key int, quantity int);")
 	if err != nil {
 		log.Println(err)

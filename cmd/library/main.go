@@ -1,6 +1,8 @@
 package main
 
 import (
+	"net/http"
+
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
 	. "github.com/Phantomvv1/Library_management/internal/books"
 	. "github.com/Phantomvv1/Library_management/internal/librarians"
@@ -10,12 +12,14 @@ import (
 
 func main() {
 	r := gin.Default()
+	r.GET("/", func(c *gin.Context) { c.JSON(http.StatusOK, nil) })
 	r.GET("/users", GetUsers)
 	r.GET("/books", GetBooks)
 	r.GET("/librarians", GetLibrarians)
 	r.GET("/event/invite", GetInvited)
 	r.GET("/history", GetHistory)
 	r.GET("/events", GetEvents)
+	r.GET("/profile", GetCurrentProfile)
 	r.POST("/book", AddBook)
 	r.POST("/signup", SignUp)
 	r.POST("/login", LogIn)

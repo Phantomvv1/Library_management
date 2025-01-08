@@ -27,6 +27,13 @@ func GetUsers(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
+	_, err = conn.Exec(context.Background(), "create table if not exists authentication (id serial primary key not null, name text, email text, password text, type text, history text);")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for authentication"})
+		return
+	}
+
 	var userList []User
 	rows, err := conn.Query(context.Background(), "select id, email, name from authentication where type = 'user';")
 	if err != nil {
@@ -49,6 +56,12 @@ func GetUsers(c *gin.Context) {
 	if rows.Err() != nil {
 		log.Println(rows.Err())
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch users"})
+		return
+	}
+
+	if userList == nil {
+		log.Println("No users created yet!")
+		c.JSON(http.StatusNotFound, gin.H{"error": "No users have been created yet"})
 		return
 	}
 

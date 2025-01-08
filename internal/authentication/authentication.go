@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"reflect"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -41,7 +42,7 @@ func SignUp(c *gin.Context) {
 	var information map[string]string
 	json.NewDecoder(c.Request.Body).Decode(&information) //name, email, password, type
 
-	_, err = conn.Exec(context.Background(), "create table if not exists authentication (id primary key serial not null, name text, email text, password text, type text, history text);")
+	_, err = conn.Exec(context.Background(), "create table if not exists authentication (id serial primary key, not null, name text, email text, password text, type text, history text);")
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for authentication"})
@@ -118,4 +119,14 @@ func LogIn(c *gin.Context) {
 	CurrentPrfile.Type = typeOfAccount
 	CurrentPrfile.History = history
 	c.JSON(http.StatusOK, nil)
+}
+
+func GetCurrentProfile(c *gin.Context) {
+	if reflect.DeepEqual(CurrentPrfile, Profile{}) {
+		log.Println("You haven't logged in yet. There is no profile information.")
+		c.JSON(http.StatusForbidden, gin.H{"error": "You haven't logged in yet. There is no profile information."})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"profile information": CurrentPrfile})
 }
