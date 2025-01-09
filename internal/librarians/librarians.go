@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
 	. "github.com/Phantomvv1/Library_management/internal/users"
@@ -27,10 +28,10 @@ type LibrariansCreate struct {
 }
 
 type Event struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Start       string `json:"start"` // Example: 1999-01-08 04:05:06
+	ID          int       `json:"id"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Start       time.Time `json:"start"` // Example: 1999-01-08 04:05:06
 }
 
 func GetLibrarians(c *gin.Context) {
@@ -102,7 +103,7 @@ func CreateEvent(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists events (id primary key serial not null, name text, description text, invited text, start timestamp);")
+	_, err = conn.Exec(context.Background(), "create table if not exists events (id serial primary key, name text, description text, invited text, start timestamp);")
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error createing a table for the events"})
@@ -116,7 +117,7 @@ func CreateEvent(c *gin.Context) {
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "insert into events (name, description, invited, start) ($1, $2, NULL, $3);", event.Name, event.Description, event.Start)
+	_, err = conn.Exec(context.Background(), "insert into events (name, description, invited, start) values ($1, $2, ' ', $3);", event.Name, event.Description, event.Start)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating the event"})
@@ -179,6 +180,7 @@ func InviteToEvent(c *gin.Context) {
 
 func GetInvited(c *gin.Context) {
 	if CurrentPrfile.Type != "librarian" {
+		log.Println("Only librarians can view who is invited to an event")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can view who is invited to an event"})
 		return
 	}
@@ -192,23 +194,28 @@ func GetInvited(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	// NOTE: Creating the table if it doesn't exist
-	_, err = conn.Exec(context.Background(), "create table if not exists events (id primary key serial not null, name text, description text, invited text, start timestamp);")
+	_, err = conn.Exec(context.Background(), "create table if not exists events (id serial primary key, name text, description text, invited text, start timestamp);")
 	if err != nil {
 		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error createing a table for the events"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for the events"})
 		return
 	}
 
 	var event Event
 	json.NewDecoder(c.Request.Body).Decode(&event) // name && (description || start)
 	var invited string
-	err = conn.QueryRow(context.Background(), "select invited from events where name = $1;", event.Name).Scan(&invited)
+	err = conn.QueryRow(context.Background(), "select invited from events where name = $1 order by start desc;", event.Name).Scan(&invited)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error there is no event with this name"})
 		return
 	}
 
+	if invited == " " {
+		log.Println("No people have been invited to this event")
+		c.JSON(http.StatusNotFound, gin.H{"error": "No people have been invited to this event"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"people invited": invited})
 }
 

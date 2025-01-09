@@ -210,6 +210,10 @@ func BorrowBook(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the database"})
 		return
 	}
+	editHistory := []byte(history)
+	if string(editHistory[0]) == " " {
+		history = book.Title
+	}
 	history = history + ", " + book.Title
 
 	_, err = conn.Exec(context.Background(), "update authentication a set history = $1 where a.id = $2;", history, CurrentPrfile.ID)

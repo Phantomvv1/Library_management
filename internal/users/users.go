@@ -72,6 +72,10 @@ func EditProfile(c *gin.Context) {
 	var edit User
 	json.NewDecoder(c.Request.Body).Decode(&edit) //name, email
 
-	CurrentPrfile.Name = edit.Name
-	CurrentPrfile.Email = edit.Email
+	if edit.Name != CurrentPrfile.Name {
+		CurrentPrfile.Name = edit.Name
+	}
+	if edit.Email != "" {
+		CurrentPrfile.Email = edit.Email
+	}
 }
