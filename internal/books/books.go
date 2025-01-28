@@ -24,6 +24,16 @@ type Book struct {
 	Quantity int    `json:"quantity"`
 }
 
+func CreateBookTable(conn *pgx.Conn) error {
+	_, err := conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
+		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	if err != nil {
+		log.Println(err)
+		return errors.New("Couldn't create a table")
+	}
+
+	return nil
+}
 func getBooks(conn *pgx.Conn) ([]Book, error) {
 	var bookList []Book
 	rows, err := conn.Query(context.Background(), "select id, isbn, title, author, year, quantity from books;")
@@ -60,11 +70,15 @@ func GetBooks(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
-		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	err = CreateAuthTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	err = CreateBookTable(conn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -100,6 +114,12 @@ func AddBook(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
+	err = CreateAuthTable(conn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
 	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
 		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
 	if err != nil {
@@ -128,11 +148,15 @@ func SearchForBook(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
-		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	err = CreateAuthTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	err = CreateBookTable(conn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -178,11 +202,15 @@ func BorrowBook(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
-		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	err = CreateAuthTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	err = CreateBookTable(conn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -213,8 +241,9 @@ func BorrowBook(c *gin.Context) {
 	editHistory := []byte(history)
 	if string(editHistory[0]) == " " {
 		history = book.Title
+	} else {
+		history = history + ", " + book.Title
 	}
-	history = history + ", " + book.Title
 
 	_, err = conn.Exec(context.Background(), "update authentication a set history = $1 where a.id = $2;", history, CurrentPrfile.ID)
 
@@ -230,11 +259,15 @@ func ReturnBook(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
-		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	err = CreateAuthTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	err = CreateBookTable(conn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -288,11 +321,15 @@ func ReserveBook(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
-		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	err = CreateAuthTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	err = CreateBookTable(conn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -324,17 +361,21 @@ func UpdateBookQuantity(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
-		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	err = CreateAuthTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	err = CreateBookTable(conn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&book) // id && quantity
-	_, err = conn.Exec(context.Background(), "update books b set b.quantity = $1 where b.id = $2;", book.Quantity, book.ID)
+	_, err = conn.Exec(context.Background(), "update books set quantity = $1 where id = $2;", book.Quantity, book.ID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the quantity of books"})
@@ -359,11 +400,15 @@ func RemoveBook(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
-		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	err = CreateAuthTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	err = CreateBookTable(conn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha512"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -31,6 +32,16 @@ func SHA512(text string) string {
 	return fmt.Sprintf("%x", result)
 }
 
+func CreateAuthTable(conn *pgx.Conn) error {
+	_, err := conn.Exec(context.Background(), "create table if not exists authentication (id serial primary key, name text, email text, password text, type text, history text);")
+	if err != nil {
+		log.Println(err)
+		return errors.New("Error creating a table for authentication")
+	}
+
+	return nil
+}
+
 func SignUp(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
@@ -42,10 +53,9 @@ func SignUp(c *gin.Context) {
 	var information map[string]string
 	json.NewDecoder(c.Request.Body).Decode(&information) //name, email, password, type
 
-	_, err = conn.Exec(context.Background(), "create table if not exists authentication (id serial primary key, name text, email text, password text, type text, history text);")
+	err = CreateAuthTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for authentication"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -85,6 +95,12 @@ func LogIn(c *gin.Context) {
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection failed"})
+		return
+	}
+
+	err = CreateAuthTable(conn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 

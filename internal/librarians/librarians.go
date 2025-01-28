@@ -3,9 +3,12 @@ package librarians
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
@@ -31,7 +34,17 @@ type Event struct {
 	ID          int       `json:"id"`
 	Name        string    `json:"name"`
 	Description string    `json:"description"`
-	Start       time.Time `json:"start"` // Example: 1999-01-08 04:05:06
+	Start       time.Time `json:"start"` // Example: 1999-01-08T04:05:06Z
+}
+
+func CreateEventTable(conn *pgx.Conn) error {
+	_, err := conn.Exec(context.Background(), "create table if not exists events (id serial primary key not null, name text, description text, invited text, start timestamp);")
+	if err != nil {
+		log.Println(err)
+		return errors.New("Error creating a table for the events")
+	}
+
+	return nil
 }
 
 func GetLibrarians(c *gin.Context) {
@@ -44,10 +57,9 @@ func GetLibrarians(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	// NOTE: Creating the table if it doesn't exist
-	_, err = conn.Exec(context.Background(), "create table if not exists authentication (id serial primary key not null, name text, email text, password text, type text, history text);")
+	err = CreateEventTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for authentication"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -103,10 +115,9 @@ func CreateEvent(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	_, err = conn.Exec(context.Background(), "create table if not exists events (id serial primary key, name text, description text, invited text, start timestamp);")
+	err = CreateEventTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error createing a table for the events"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -117,6 +128,7 @@ func CreateEvent(c *gin.Context) {
 		return
 	}
 
+	fmt.Println(event.Start)
 	_, err = conn.Exec(context.Background(), "insert into events (name, description, invited, start) values ($1, $2, ' ', $3);", event.Name, event.Description, event.Start)
 	if err != nil {
 		log.Println(err)
@@ -129,7 +141,7 @@ func CreateEvent(c *gin.Context) {
 
 func InviteToEvent(c *gin.Context) {
 	if CurrentPrfile.Type != "librarian" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can create events"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can invite people events"})
 		return
 	}
 
@@ -142,17 +154,17 @@ func InviteToEvent(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	// NOTE: Creating the table if it doesn't exist
-	_, err = conn.Exec(context.Background(), "create table if not exists events (id primary key serial not null, name text, description text, invited text, start timestamp);")
+	err = CreateEventTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error createing a table for the events"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
-	var user User
-	json.NewDecoder(c.Request.Body).Decode(&user) // email && (id || name)
+	var information map[string]string
+	json.NewDecoder(c.Request.Body).Decode(&information) // email && eventName (id || name)
 
-	err = conn.QueryRow(context.Background(), "select id, email, name from authentication where email = $1;", user.Email).Scan(user.ID, user.Email, user.Name)
+	var user User
+	err = conn.QueryRow(context.Background(), "select id, email, name from authentication where email = $1;", information["email"]).Scan(&user.ID, &user.Email, &user.Name)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting information from the database"})
@@ -160,13 +172,28 @@ func InviteToEvent(c *gin.Context) {
 	}
 
 	var invited string
-	err = conn.QueryRow(context.Background(), "select invited from events;").Scan(&invited)
+	err = conn.QueryRow(context.Background(), "select invited from events e where e.name = $1;", information["eventName"]).Scan(&invited)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inviting the person"})
 		return
 	}
-	invited = invited + ", " + user.Email
+
+	//Check if the person has already been invited to the event
+	invitedArr := strings.Split(invited, ", ")
+	for _, email := range invitedArr {
+		if email == user.Email {
+			log.Println("The person has already been invited to this event")
+			c.JSON(http.StatusConflict, gin.H{"error": "The person has already been invited to this event"})
+			return
+		}
+	}
+
+	if invited == " " {
+		invited = user.Email
+	} else {
+		invited = invited + ", " + user.Email
+	}
 
 	_, err = conn.Exec(context.Background(), "update events set invited = $1;", invited)
 	if err != nil {
@@ -194,10 +221,9 @@ func GetInvited(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	// NOTE: Creating the table if it doesn't exist
-	_, err = conn.Exec(context.Background(), "create table if not exists events (id serial primary key, name text, description text, invited text, start timestamp);")
+	err = CreateEventTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for the events"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -229,10 +255,9 @@ func GetEvents(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	// NOTE: Creating the table if it doesn't exist
-	_, err = conn.Exec(context.Background(), "create table if not exists events (id serial primary key not null, name text, description text, invited text, start timestamp);")
+	err = CreateEventTable(conn)
 	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error creating a table for the events"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -284,6 +309,12 @@ func ViewUserHistory(c *gin.Context) {
 		return
 	}
 	defer conn.Close(context.Background())
+
+	err = CreateAuthTable(conn)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
 
 	rows, err := conn.Query(context.Background(), "select name, email, history from authentication a where a.type = 'user';")
 	if err != nil {
