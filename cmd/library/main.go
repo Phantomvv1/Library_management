@@ -19,6 +19,7 @@ func main() {
 	r.GET("/history", GetHistory)
 	r.GET("/events", GetEvents)
 	r.GET("/profile", GetCurrentProfile)
+	r.GET("/user/history", GetUserHistory)
 	r.POST("/event/invited", GetInvited)
 	r.POST("/book", AddBook)
 	r.POST("/signup", SignUp)
@@ -32,7 +33,6 @@ func main() {
 	r.POST("/event/invite", InviteToEvent)
 	r.POST("/book/quantity", UpdateBookQuantity)
 	r.POST("/book/remove", RemoveBook)
-	r.POST("/user/history", ViewUserHistory)
 
 	r.Run(":42069")
 }

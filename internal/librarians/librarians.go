@@ -295,7 +295,7 @@ func GetEvents(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"events": events})
 }
 
-func ViewUserHistory(c *gin.Context) {
+func GetUserHistory(c *gin.Context) {
 	if CurrentPrfile.Type != "librarian" {
 		log.Println("Only librarians can view the history of users")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can view the history of users"})
