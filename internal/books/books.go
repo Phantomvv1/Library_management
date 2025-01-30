@@ -401,7 +401,20 @@ func ReserveBook(c *gin.Context) {
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "update books set reserved_from_id = $1 where title = $2;", CurrentPrfile.ID, book.Title)
+	err = conn.QueryRow(context.Background(), "select id, isbn, title, author, year, quantity from books b where b.title = $1;", book.Title).Scan(
+		&book.ID, &book.ISBN, &book.Title, &book.Author, &book.Year, &book.Quantity)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the book details"})
+		return
+	}
+
+	if book.Quantity > 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "There are copies from this book available. There is no need to reserve it."})
+		return
+	}
+
+	_, err = conn.Exec(context.Background(), "update book_reservations set book_id = $1, user_id = $2 where title = $3;", book.ID, CurrentPrfile.ID, book.Title)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reserving the book"})
