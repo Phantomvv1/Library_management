@@ -24,9 +24,19 @@ type Book struct {
 	Quantity int    `json:"quantity"`
 }
 
+func CreateBookReservationsTable(conn *pgx.Conn) error {
+	_, err := conn.Exec(context.Background(), "create table if not exists book_reservations (id serial primary key, book_id int, user_id int);")
+	if err != nil {
+		log.Println(err)
+		return errors.New("Couldn't create a table for story the books reserved from customers.")
+	}
+
+	return nil
+}
+
 func CreateBookTable(conn *pgx.Conn) error {
 	_, err := conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
-		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+		"quantity int);")
 	if err != nil {
 		log.Println(err)
 		return errors.New("Couldn't create a table")
@@ -120,10 +130,8 @@ func AddBook(c *gin.Context) {
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "create table if not exists books (id serial primary key, isbn text, title text, author text, year int, "+
-		"reserved_from_id int, quantity int, foreign key (reserved_from_id) references authentication(id));")
+	err = CreateBookTable(conn)
 	if err != nil {
-		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Couldn't create a table"})
 		return
 	}
@@ -257,6 +265,11 @@ func BorrowBook(c *gin.Context) {
 	}
 
 	_, err = conn.Exec(context.Background(), "update authentication set history = $1 where id = $2;", history, CurrentPrfile.ID)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the history of the user"})
+		return
+	}
 
 	c.JSON(http.StatusOK, nil)
 }
@@ -282,6 +295,11 @@ func ReturnBook(c *gin.Context) {
 		return
 	}
 
+	if err = CreateBookReservationsTable(conn); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&book) //title & (author | isbn | year | id)
 
@@ -292,12 +310,26 @@ func ReturnBook(c *gin.Context) {
 		return
 	}
 
-	var reserved_id int
-	err = conn.QueryRow(context.Background(), "select reserved_from_id from books b where b.title = $1;", book.Title).Scan(&reserved_id)
+	var reservedBookIds []int
+	var reservedUserIds []int
+	rows, err := conn.Query(context.Background(), "select book_id, user_id from books b where b.title = $1;", book.Title)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error checking if the book is reserved"})
 		return
+	}
+
+	for rows.Next() {
+		var bookId, userId int
+		err = rows.Scan(&bookId, userId)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error collecting the id's for the reserved books"})
+			return
+		}
+
+		reservedBookIds = append(reservedBookIds, bookId)
+		reservedUserIds = append(reservedUserIds, userId)
 	}
 
 	if reserved_id == 0 {
@@ -309,6 +341,13 @@ func ReturnBook(c *gin.Context) {
 		}
 	} else {
 		_, err = conn.Exec(context.Background(), "update authentication set history = (history || ', ' || $1) where id = $2;", book.Title, reserved_id)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the history of this person"})
+			return
+		}
+
+		_, err = conn.Exec(context.Background(), "update books set reserved_from_id = 0 where id = $1;", book.ID)
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the history of this person"})
@@ -340,6 +379,11 @@ func ReserveBook(c *gin.Context) {
 
 	err = CreateBookTable(conn)
 	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	if err = CreateBookReservationsTable(conn); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
