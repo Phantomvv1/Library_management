@@ -59,8 +59,12 @@ func updateHistory(conn *pgx.Conn, book Book, userID int) error {
 
 func borrowReservedBooks(conn *pgx.Conn, book Book) error {
 	var userID int
-	err := conn.QueryRow(context.Background(), "select book_id, user_id from book_reservations b where b.book_id = $1 order by b.id asc;", book.ID).Scan(&book.ID, &userID)
+	err := conn.QueryRow(context.Background(), "select book_id, user_id from book_reservations b where b.book_id = $1 order by b.id asc limit 1;", book.ID).Scan(&book.ID, &userID)
 	if err != nil {
+		if err == pgx.ErrNoRows { //no reservations for this book
+			return nil
+		}
+
 		log.Println(err)
 		return errors.New("Error checking if the book is reserved")
 	}
@@ -363,7 +367,10 @@ func ReturnBook(c *gin.Context) {
 		return
 	}
 
-	borrowReservedBooks(conn, book)
+	if err = borrowReservedBooks(conn, book); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
 
 	c.JSON(http.StatusOK, nil)
 }
@@ -476,11 +483,18 @@ func UpdateBookQuantity(c *gin.Context) {
 
 	if book.Quantity > rowsCount {
 		for range rowsCount {
-			borrowReservedBooks(conn, book)
+			if err = borrowReservedBooks(conn, book); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+				return
+			}
+
 		}
 	} else {
 		for range book.Quantity {
-			borrowReservedBooks(conn, book)
+			if err = borrowReservedBooks(conn, book); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+				return
+			}
 		}
 	}
 
