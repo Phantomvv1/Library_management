@@ -65,7 +65,7 @@ func borrowReservedBooks(conn *pgx.Conn, book Book) error {
 		return errors.New("Error checking if the book is reserved")
 	}
 
-	_, err = conn.Exec(context.Background(), "update books set quantity = quantity + 1 where id = $1;", book.ID)
+	_, err = conn.Exec(context.Background(), "update books set quantity = quantity - 1 where id = $1;", book.ID)
 	if err != nil {
 		log.Println(err)
 		return errors.New("Error updating the database")
@@ -75,6 +75,12 @@ func borrowReservedBooks(conn *pgx.Conn, book Book) error {
 	if err != nil {
 		log.Println(err)
 		return err
+	}
+
+	_, err = conn.Exec(context.Background(), "delete from book_reservations where book_id = $1 and user_id = $2", book.ID, userID)
+	if err != nil {
+		log.Println(err)
+		return errors.New("Error removing the borrowing the reserved book")
 	}
 
 	return nil
@@ -414,7 +420,7 @@ func ReserveBook(c *gin.Context) {
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "update book_reservations set book_id = $1, user_id = $2 where title = $3;", book.ID, CurrentPrfile.ID, book.Title)
+	_, err = conn.Exec(context.Background(), "insert into book_reservations (book_id, user_id) values ($1, $2);", book.ID, CurrentPrfile.ID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reserving the book"})
@@ -458,6 +464,24 @@ func UpdateBookQuantity(c *gin.Context) {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the quantity of books"})
 		return
+	}
+
+	var rowsCount int
+	err = conn.QueryRow(context.Background(), "select count(*) from book_reservations where book_id = $1", book.ID).Scan(&rowsCount)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error counting the reservations for this book."})
+		return
+	}
+
+	if book.Quantity > rowsCount {
+		for range rowsCount {
+			borrowReservedBooks(conn, book)
+		}
+	} else {
+		for range book.Quantity {
+			borrowReservedBooks(conn, book)
+		}
 	}
 
 	c.JSON(http.StatusOK, nil)
