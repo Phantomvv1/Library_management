@@ -16,11 +16,11 @@ import (
 )
 
 type Profile struct {
-	ID      int    `json:"id"`
-	Name    string `json:"name"`
-	Email   string `json:"email"`
-	Type    string `json:"type"`
-	History string `json:"history"`
+	ID      int      `json:"id"`
+	Name    string   `json:"name"`
+	Email   string   `json:"email"`
+	Type    string   `json:"type"`
+	History []string `json:"history"`
 }
 
 var CurrentPrfile Profile
@@ -33,7 +33,7 @@ func SHA512(text string) string {
 }
 
 func CreateAuthTable(conn *pgx.Conn) error {
-	_, err := conn.Exec(context.Background(), "create table if not exists authentication (id serial primary key, name text, email text, password text, type text, history text);")
+	_, err := conn.Exec(context.Background(), "create table if not exists authentication (id serial primary key, name text, email text, password text, type text, history text[]);")
 	if err != nil {
 		log.Println(err)
 		return errors.New("Error creating a table for authentication")
@@ -79,7 +79,7 @@ func SignUp(c *gin.Context) {
 	}
 
 	hashedPassword := SHA512(information["password"])
-	_, err = conn.Exec(context.Background(), "insert into authentication (name, email, password, type, history) values ($1, $2, $3, $4, ' ');",
+	_, err = conn.Exec(context.Background(), "insert into authentication (name, email, password, type, history) values ($1, $2, $3, $4, array[]::text[]);",
 		information["name"], information["email"], hashedPassword, information["type"])
 	if err != nil {
 		log.Println(err)
@@ -107,7 +107,8 @@ func LogIn(c *gin.Context) {
 	var information map[string]string
 	json.NewDecoder(c.Request.Body).Decode(&information) //email, password
 
-	var passwordCheck, name, email, typeOfAccount, history string
+	var passwordCheck, name, email, typeOfAccount string
+	var history []string
 	var id int
 	err = conn.QueryRow(context.Background(), "select password, name, type, email, history, id from authentication a where a.email = $1;", information["email"]).Scan(
 		&passwordCheck, &name, &typeOfAccount, &email, &history, &id)

@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strings"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
 	"github.com/gin-gonic/gin"
@@ -26,35 +25,28 @@ type Book struct {
 }
 
 func updateHistory(conn *pgx.Conn, book Book, userID int) error {
-	var history string
+	var history []string
 	err := conn.QueryRow(context.Background(), "select history from authentication a where a.id = $1 limit 1;", userID).Scan(&history)
 	if err != nil {
 		log.Println(err)
 		return errors.New("Couldn't get the history of the user")
 	}
 
-	editHistory := []byte(history)
-	if editHistory[0] == ' ' {
-		history = book.Title
-	} else {
-		history = history + ", " + book.Title
-	}
-
-	borrowedBooks := strings.Split(history, ", ")
-	for _, bookName := range borrowedBooks {
-		if bookName == book.Title {
+	for _, title := range history {
+		if title == book.Title {
 			return nil
 		}
 	}
 
-	_, err = conn.Exec(context.Background(), "update authentication set history = (history || ', ' || $1) where id = $2;", book.Title, userID)
+	CurrentPrfile.History = append(CurrentPrfile.History, book.Title)
+
+	_, err = conn.Exec(context.Background(), "update authentication set history = array_append(history, $1) where id = $2;", book.Title, userID)
 	if err != nil {
 		log.Println(err)
 		return errors.New("Error updating the history of this person")
 	}
 
 	return nil
-
 }
 
 func borrowReservedBooks(conn *pgx.Conn, book Book) error {
@@ -318,7 +310,10 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
-	updateHistory(conn, book, CurrentPrfile.ID)
+	if err = updateHistory(conn, book, CurrentPrfile.ID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the history of the person"})
+		return
+	}
 
 	c.JSON(http.StatusOK, nil)
 }
