@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"time"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,26 @@ type Book struct {
 	Author   string `json:"author"`
 	Year     uint   `json:"year"`
 	Quantity int    `json:"quantity"`
+}
+
+func borrowBook(conn *pgx.Conn, book Book, returnDate time.Time) error {
+	_, err := conn.Exec(context.Background(), "insert into borrowed_books (book_id, user_id) values ($1, $2, return_date)", book.ID, CurrentPrfile.ID, returnDate)
+	if err != nil {
+		log.Println(err)
+		return errors.New("Unable to put the information about the borrowed book in the table")
+	}
+
+	return nil
+}
+
+func createBorrowedBooksTable(conn *pgx.Conn) error {
+	_, err := conn.Exec(context.Background(), "create table if not exists borrowed_books (id serial primary key not null, book_id int, user_id int, return_date date);")
+	if err != nil {
+		log.Println(err)
+		return errors.New("Unable to create a table for keeping the borrowed books in.")
+	}
+
+	return nil
 }
 
 func updateHistory(conn *pgx.Conn, book Book, userID int) error {
@@ -281,8 +302,16 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
+	if err = createBorrowedBooksTable(conn); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
 	var book Book
-	json.NewDecoder(c.Request.Body).Decode(&book) //title & (author | isbn | year | id)
+	json.NewDecoder(c.Request.Body).Decode(&book) //title && returnDate (author | isbn | year | id)
+
+	var returnDateMap map[string]string
+	json.NewDecoder(c.Request.Body).Decode(&returnDateMap)
 
 	_, err = conn.Exec(context.Background(), "update books set quantity = quantity - 1 where title = $1 and quantity > 0;", book.Title)
 	if err != nil {
@@ -291,7 +320,7 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
-	err = conn.QueryRow(context.Background(), "select quantity from books b where b.title = $1", book.Title).Scan(&book.Quantity)
+	err = conn.QueryRow(context.Background(), "select id, quantity from books b where b.title = $1", book.Title).Scan(&book.ID, &book.Quantity)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error viewing the quantity of the book"})
@@ -307,6 +336,18 @@ func BorrowBook(c *gin.Context) {
 	if CurrentPrfile.ID == 0 {
 		log.Println("Not logged in")
 		c.JSON(http.StatusForbidden, gin.H{"error": "You need to log in, in order to borrow a book"})
+		return
+	}
+
+	returnDate, err := time.Parse("2020-9-15", returnDateMap["returnDate"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the return date."})
+		return
+	}
+
+	if err = borrowBook(conn, book, returnDate); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
 
@@ -340,6 +381,11 @@ func ReturnBook(c *gin.Context) {
 	}
 
 	if err = CreateBookReservationsTable(conn); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	if err = createBorrowedBooksTable(conn); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
 		return
 	}
