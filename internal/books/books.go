@@ -26,7 +26,7 @@ type Book struct {
 }
 
 func borrowBook(conn *pgx.Conn, book Book, returnDate time.Time) error {
-	_, err := conn.Exec(context.Background(), "insert into borrowed_books (book_id, user_id) values ($1, $2, return_date)", book.ID, CurrentPrfile.ID, returnDate)
+	_, err := conn.Exec(context.Background(), "insert into borrowed_books (book_id, user_id, return_date) values ($1, $2, $3)", book.ID, CurrentPrfile.ID, returnDate)
 	if err != nil {
 		log.Println(err)
 		return errors.New("Unable to put the information about the borrowed book in the table")
@@ -307,11 +307,11 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
-	var book Book
-	json.NewDecoder(c.Request.Body).Decode(&book) //title && returnDate (author | isbn | year | id)
-
 	var returnDateMap map[string]string
-	json.NewDecoder(c.Request.Body).Decode(&returnDateMap)
+	json.NewDecoder(c.Request.Body).Decode(&returnDateMap) //title && returnDate (author | isbn | year | id)
+
+	var book Book
+	book.Title = returnDateMap["title"]
 
 	_, err = conn.Exec(context.Background(), "update books set quantity = quantity - 1 where title = $1 and quantity > 0;", book.Title)
 	if err != nil {
@@ -339,7 +339,7 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
-	returnDate, err := time.Parse("2020-9-15", returnDateMap["returnDate"])
+	returnDate, err := time.Parse(time.DateOnly, returnDateMap["returnDate"])
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the return date."})
@@ -401,10 +401,23 @@ func ReturnBook(c *gin.Context) {
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "update books set quantity = quantity + 1 where id = $1;", book.ID)
+	if CurrentPrfile.ID == 0 {
+		log.Println("The user hasn't logged in")
+		c.JSON(http.StatusForbidden, gin.H{"error": "You haven't logged in. You must be logged in, in order to return a book."})
+		return
+	}
+
+	_, err = conn.Exec(context.Background(), "delete from borrowed_books where book_id = $1 and user_id = $2;", book.ID, CurrentPrfile.ID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error returning the book"})
+		return
+	}
+
+	_, err = conn.Exec(context.Background(), "update books set quantity = quantity + 1 where id = $1;", book.ID)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error adding the book to our inventory"})
 		return
 	}
 
