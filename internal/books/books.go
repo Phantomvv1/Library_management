@@ -407,8 +407,13 @@ func ReturnBook(c *gin.Context) {
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "delete from borrowed_books where book_id = $1 and user_id = $2;", book.ID, CurrentPrfile.ID)
+	var id int
+	err = conn.QueryRow(context.Background(), "delete from borrowed_books where book_id = $1 and user_id = $2 returning id;", book.ID, CurrentPrfile.ID).Scan(&id)
 	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusForbidden, gin.H{"message": "You can't return a book that you haven't borrowed or you have already returned"})
+			return
+		}
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error returning the book"})
 		return
