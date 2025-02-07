@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"regexp"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -56,6 +57,19 @@ func SignUp(c *gin.Context) {
 	err = CreateAuthTable(conn)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	validEmail, err := regexp.MatchString(".*@.*", information["email"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error validating the email"})
+		return
+	}
+
+	if !validEmail {
+		log.Println("Invalid email")
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error invalid email"})
 		return
 	}
 
