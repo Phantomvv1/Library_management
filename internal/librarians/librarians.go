@@ -102,7 +102,7 @@ func GetLibrarians(c *gin.Context) {
 }
 
 func CreateEvent(c *gin.Context) {
-	if CurrentPrfile.Type != "librarian" {
+	if CurrentProfile.Type != "librarian" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can create events"})
 		return
 	}
@@ -140,7 +140,7 @@ func CreateEvent(c *gin.Context) {
 }
 
 func InviteToEvent(c *gin.Context) {
-	if CurrentPrfile.Type != "librarian" {
+	if CurrentProfile.Type != "librarian" {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can invite people events"})
 		return
 	}
@@ -206,7 +206,7 @@ func InviteToEvent(c *gin.Context) {
 }
 
 func GetInvited(c *gin.Context) {
-	if CurrentPrfile.Type != "librarian" {
+	if CurrentProfile.Type != "librarian" {
 		log.Println("Only librarians can view who is invited to an event")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can view who is invited to an event"})
 		return
@@ -296,7 +296,7 @@ func GetEvents(c *gin.Context) {
 }
 
 func GetUserHistory(c *gin.Context) {
-	if CurrentPrfile.Type != "librarian" {
+	if CurrentProfile.Type != "librarian" {
 		log.Println("Only librarians can view the history of users")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can view the history of users"})
 		return

@@ -11,8 +11,11 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -24,7 +27,55 @@ type Profile struct {
 	History []string `json:"history"`
 }
 
-var CurrentPrfile Profile
+var CurrentProfile Profile
+
+var jwtKey string
+
+func generateJWTToken(email string) (string, error) {
+	claims := jwt.MapClaims{
+		"email":      email,
+		"expiration": time.Now().Add(time.Hour * 24).Unix(),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	if jwtKey == "" {
+		jwtKey = os.Getenv("JWT_KEY")
+	}
+	return token.SignedString(jwtKey)
+}
+
+func ValidateJWT(tokenString string) (bool, error) {
+	claims := &jwt.MapClaims{}
+
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) { return jwtKey, nil })
+	if err != nil || !token.Valid {
+		log.Println(err)
+		return false, err
+	}
+
+	var newClaims jwt.MapClaims
+	if nClaims, ok := token.Claims.(jwt.MapClaims); !ok {
+		return ok, errors.New("Error parsing the token")
+	} else {
+		newClaims = nClaims
+	}
+
+	var tokenExpiration int64
+	if expiration, ok := newClaims["expiration"].(string); ok {
+		tokenExpiration, err = strconv.ParseInt(expiration, 10, 64)
+		if err != nil {
+			return false, err
+		}
+	} else {
+		return ok, errors.New("Error parsing the expiration date of the token")
+	}
+
+	if tokenExpiration < time.Now().Unix() {
+		return false, errors.New("Error token has expired")
+	}
+
+	return true, nil
+}
 
 func SHA512(text string) string {
 	algorithm := sha512.New()
@@ -144,20 +195,20 @@ func LogIn(c *gin.Context) {
 		return
 	}
 
-	CurrentPrfile.ID = id
-	CurrentPrfile.Name = name
-	CurrentPrfile.Email = email
-	CurrentPrfile.Type = typeOfAccount
-	CurrentPrfile.History = history
+	CurrentProfile.ID = id
+	CurrentProfile.Name = name
+	CurrentProfile.Email = email
+	CurrentProfile.Type = typeOfAccount
+	CurrentProfile.History = history
 	c.JSON(http.StatusOK, nil)
 }
 
 func GetCurrentProfile(c *gin.Context) {
-	if reflect.DeepEqual(CurrentPrfile, Profile{}) {
+	if reflect.DeepEqual(CurrentProfile, Profile{}) {
 		log.Println("You haven't logged in yet. There is no profile information.")
 		c.JSON(http.StatusForbidden, gin.H{"error": "You haven't logged in yet. There is no profile information."})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"profile information": CurrentPrfile})
+	c.JSON(http.StatusOK, gin.H{"profile information": CurrentProfile})
 }

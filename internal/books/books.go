@@ -26,7 +26,7 @@ type Book struct {
 }
 
 func borrowBook(conn *pgx.Conn, book Book, returnDate time.Time) error {
-	_, err := conn.Exec(context.Background(), "insert into borrowed_books (book_id, user_id, return_date) values ($1, $2, $3)", book.ID, CurrentPrfile.ID, returnDate)
+	_, err := conn.Exec(context.Background(), "insert into borrowed_books (book_id, user_id, return_date) values ($1, $2, $3)", book.ID, CurrentProfile.ID, returnDate)
 	if err != nil {
 		log.Println(err)
 		return errors.New("Unable to put the information about the borrowed book in the table")
@@ -59,7 +59,7 @@ func updateHistory(conn *pgx.Conn, book Book, userID int) error {
 		}
 	}
 
-	CurrentPrfile.History = append(CurrentPrfile.History, book.Title)
+	CurrentProfile.History = append(CurrentProfile.History, book.Title)
 
 	_, err = conn.Exec(context.Background(), "update authentication set history = array_append(history, $1) where id = $2;", book.Title, userID)
 	if err != nil {
@@ -187,7 +187,7 @@ func GetBooks(c *gin.Context) {
 }
 
 func AddBook(c *gin.Context) {
-	if CurrentPrfile.Type != "librarian" {
+	if CurrentProfile.Type != "librarian" {
 		log.Println("Users can't add books")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Error users can't add books"})
 		return
@@ -333,7 +333,7 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
-	if CurrentPrfile.ID == 0 {
+	if CurrentProfile.ID == 0 {
 		log.Println("Not logged in")
 		c.JSON(http.StatusForbidden, gin.H{"error": "You need to log in, in order to borrow a book"})
 		return
@@ -351,7 +351,7 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
-	if err = updateHistory(conn, book, CurrentPrfile.ID); err != nil {
+	if err = updateHistory(conn, book, CurrentProfile.ID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the history of the person"})
 		return
 	}
@@ -401,14 +401,14 @@ func ReturnBook(c *gin.Context) {
 		return
 	}
 
-	if CurrentPrfile.ID == 0 {
+	if CurrentProfile.ID == 0 {
 		log.Println("The user hasn't logged in")
 		c.JSON(http.StatusForbidden, gin.H{"error": "You haven't logged in. You must be logged in, in order to return a book."})
 		return
 	}
 
 	var id int
-	err = conn.QueryRow(context.Background(), "delete from borrowed_books where book_id = $1 and user_id = $2 returning id;", book.ID, CurrentPrfile.ID).Scan(&id)
+	err = conn.QueryRow(context.Background(), "delete from borrowed_books where book_id = $1 and user_id = $2 returning id;", book.ID, CurrentProfile.ID).Scan(&id)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			c.JSON(http.StatusForbidden, gin.H{"message": "You can't return a book that you haven't borrowed or you have already returned"})
@@ -435,7 +435,7 @@ func ReturnBook(c *gin.Context) {
 }
 
 func GetHistory(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"history": CurrentPrfile.History})
+	c.JSON(http.StatusOK, gin.H{"history": CurrentProfile.History})
 }
 
 func ReserveBook(c *gin.Context) {
@@ -467,7 +467,7 @@ func ReserveBook(c *gin.Context) {
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&book) //title & (author | isbn | year | id)
 
-	if CurrentPrfile.ID == 0 {
+	if CurrentProfile.ID == 0 {
 		log.Println("Not logged in")
 		c.JSON(http.StatusForbidden, gin.H{"error": "You need to log in, in order to reserve a book"})
 		return
@@ -486,7 +486,7 @@ func ReserveBook(c *gin.Context) {
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "insert into book_reservations (book_id, user_id) values ($1, $2);", book.ID, CurrentPrfile.ID)
+	_, err = conn.Exec(context.Background(), "insert into book_reservations (book_id, user_id) values ($1, $2);", book.ID, CurrentProfile.ID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reserving the book"})
@@ -497,7 +497,7 @@ func ReserveBook(c *gin.Context) {
 }
 
 func UpdateBookQuantity(c *gin.Context) {
-	if CurrentPrfile.Type != "librarian" {
+	if CurrentProfile.Type != "librarian" {
 		log.Println("Users can't update the quantity of books")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Error users can't update the quantity of books"})
 		return
@@ -561,7 +561,7 @@ func UpdateBookQuantity(c *gin.Context) {
 }
 
 func RemoveBook(c *gin.Context) {
-	if CurrentPrfile.Type != "librarian" {
+	if CurrentProfile.Type != "librarian" {
 		log.Println("Users can't remove books")
 		c.JSON(http.StatusForbidden, gin.H{"error": "Error users can't remove books"})
 		return
