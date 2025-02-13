@@ -31,50 +31,67 @@ var CurrentProfile Profile
 
 var jwtKey string
 
-func generateJWTToken(email string) (string, error) {
+func GenerateJWT(id int, accountType string, email string) (string, error) {
 	claims := jwt.MapClaims{
+		"id":         id,
+		"type":       accountType,
 		"email":      email,
 		"expiration": time.Now().Add(time.Hour * 24).Unix(),
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	if jwtKey == "" {
 		jwtKey = os.Getenv("JWT_KEY")
 	}
 	return token.SignedString(jwtKey)
 }
 
-func ValidateJWT(tokenString string) (bool, error) {
+func ValidateJWT(tokenString string) (int, string, error) {
 	claims := &jwt.MapClaims{}
 
-	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) { return jwtKey, nil })
+	token, err := jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.ErrUnsupported
+		}
+
+		return jwtKey, nil
+	})
+
 	if err != nil || !token.Valid {
 		log.Println(err)
-		return false, err
+		return 0, "", err
 	}
 
-	var newClaims jwt.MapClaims
-	if nClaims, ok := token.Claims.(jwt.MapClaims); !ok {
-		return ok, errors.New("Error parsing the token")
-	} else {
-		newClaims = nClaims
+	newClaims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0, "", errors.New("Error parsing the token")
 	}
 
 	var tokenExpiration int64
 	if expiration, ok := newClaims["expiration"].(string); ok {
 		tokenExpiration, err = strconv.ParseInt(expiration, 10, 64)
 		if err != nil {
-			return false, err
+			return 0, "", err
 		}
 	} else {
-		return ok, errors.New("Error parsing the expiration date of the token")
+		return 0, "", errors.New("Error parsing the expiration date of the token")
 	}
 
 	if tokenExpiration < time.Now().Unix() {
-		return false, errors.New("Error token has expired")
+		return 0, "", errors.New("Error token has expired")
 	}
 
-	return true, nil
+	id, ok := newClaims["id"].(int)
+	if !ok {
+		return 0, "", errors.New("Incorrect type of id")
+	}
+
+	accountType, ok := newClaims["type"].(string)
+	if !ok {
+		return 0, "", errors.New("Incorrect type of account")
+	}
+
+	return id, accountType, nil
 }
 
 func SHA512(text string) string {
@@ -195,15 +212,17 @@ func LogIn(c *gin.Context) {
 		return
 	}
 
-	CurrentProfile.ID = id
-	CurrentProfile.Name = name
-	CurrentProfile.Email = email
-	CurrentProfile.Type = typeOfAccount
-	CurrentProfile.History = history
-	c.JSON(http.StatusOK, nil)
+	jwtToken, err := GenerateJWT(id, typeOfAccount, email)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while generating your token"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"token": jwtToken})
 }
 
-func GetCurrentProfile(c *gin.Context) {
+func GetCurrentProfile(c *gin.Context) { //Needs fixing in order to work with JWT
 	if reflect.DeepEqual(CurrentProfile, Profile{}) {
 		log.Println("You haven't logged in yet. There is no profile information.")
 		c.JSON(http.StatusForbidden, gin.H{"error": "You haven't logged in yet. There is no profile information."})
