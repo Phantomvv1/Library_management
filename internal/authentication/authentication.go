@@ -9,9 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"reflect"
 	"regexp"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -29,8 +27,6 @@ type Profile struct {
 
 var CurrentProfile Profile
 
-var jwtKey string
-
 func GenerateJWT(id int, accountType string, email string) (string, error) {
 	claims := jwt.MapClaims{
 		"id":         id,
@@ -40,10 +36,8 @@ func GenerateJWT(id int, accountType string, email string) (string, error) {
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	if jwtKey == "" {
-		jwtKey = os.Getenv("JWT_KEY")
-	}
-	return token.SignedString(jwtKey)
+	jwtKey := os.Getenv("JWT_KEY")
+	return token.SignedString([]byte(jwtKey))
 }
 
 func ValidateJWT(tokenString string) (int, string, error) {
@@ -54,44 +48,33 @@ func ValidateJWT(tokenString string) (int, string, error) {
 			return nil, errors.ErrUnsupported
 		}
 
-		return jwtKey, nil
+		return []byte(os.Getenv("JWT_KEY")), nil
 	})
 
 	if err != nil || !token.Valid {
-		log.Println(err)
 		return 0, "", err
 	}
 
-	newClaims, ok := token.Claims.(jwt.MapClaims)
+	expiration, ok := (*claims)["expiration"].(float64)
 	if !ok {
-		return 0, "", errors.New("Error parsing the token")
-	}
-
-	var tokenExpiration int64
-	if expiration, ok := newClaims["expiration"].(string); ok {
-		tokenExpiration, err = strconv.ParseInt(expiration, 10, 64)
-		if err != nil {
-			return 0, "", err
-		}
-	} else {
 		return 0, "", errors.New("Error parsing the expiration date of the token")
 	}
 
-	if tokenExpiration < time.Now().Unix() {
+	if int64(expiration) < time.Now().Unix() {
 		return 0, "", errors.New("Error token has expired")
 	}
 
-	id, ok := newClaims["id"].(int)
+	id, ok := (*claims)["id"].(float64)
 	if !ok {
 		return 0, "", errors.New("Incorrect type of id")
 	}
 
-	accountType, ok := newClaims["type"].(string)
+	accountType, ok := (*claims)["type"].(string)
 	if !ok {
 		return 0, "", errors.New("Incorrect type of account")
 	}
 
-	return id, accountType, nil
+	return int(id), accountType, nil
 }
 
 func SHA512(text string) string {
@@ -222,12 +205,42 @@ func LogIn(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"token": jwtToken})
 }
 
-func GetCurrentProfile(c *gin.Context) { //Needs fixing in order to work with JWT
-	if reflect.DeepEqual(CurrentProfile, Profile{}) {
-		log.Println("You haven't logged in yet. There is no profile information.")
-		c.JSON(http.StatusForbidden, gin.H{"error": "You haven't logged in yet. There is no profile information."})
+func GetCurrentProfile(c *gin.Context) {
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error couldn't connect to the database"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"profile information": CurrentProfile})
+	var tokenString map[string]string
+	json.NewDecoder(c.Request.Body).Decode(&tokenString)
+
+	var id int
+	var accountType string
+	id, accountType, err = ValidateJWT(tokenString["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error validating the token"})
+		return
+	}
+
+	var name, email string
+	var history []string
+	err = conn.QueryRow(context.Background(), "select name, email, history from authentication where id = $1", id).Scan(&name, &email, &history)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting information from the database"})
+		return
+	}
+
+	UserProfile := Profile{
+		ID:      id,
+		Name:    name,
+		Email:   email,
+		Type:    accountType,
+		History: history,
+	}
+
+	c.JSON(http.StatusOK, gin.H{"profile information": UserProfile})
 }
