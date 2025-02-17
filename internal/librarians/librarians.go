@@ -101,12 +101,7 @@ func GetLibrarians(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"librarians": librarianList})
 }
 
-func CreateEvent(c *gin.Context) {
-	if CurrentProfile.Type != "librarian" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can create events"})
-		return
-	}
-
+func CreateEvent(c *gin.Context) { //testing needed
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -121,14 +116,34 @@ func CreateEvent(c *gin.Context) {
 		return
 	}
 
+	var information map[string]string
 	var event Event
-	json.NewDecoder(c.Request.Body).Decode(&event) //name && start (descrpition not neccessary)
-	if event.Name == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Error no name provided"})
+	json.NewDecoder(c.Request.Body).Decode(&information) //name && start && token (descrpition not neccessary)
+
+	_, accountType, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
 		return
 	}
 
-	fmt.Println(event.Start)
+	if accountType != "librarian" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can create events"})
+		return
+	}
+
+	if information["name"] == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error no name provided"})
+		return
+	}
+	event.Name = information["name"]
+	event.Start, err = time.Parse(time.RFC3339, information["start"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error trying to parse the time given"})
+		return
+	}
+
 	_, err = conn.Exec(context.Background(), "insert into events (name, description, invited, start) values ($1, $2, ' ', $3);", event.Name, event.Description, event.Start)
 	if err != nil {
 		log.Println(err)
@@ -139,12 +154,7 @@ func CreateEvent(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func InviteToEvent(c *gin.Context) {
-	if CurrentProfile.Type != "librarian" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can invite people events"})
-		return
-	}
-
+func InviteToEvent(c *gin.Context) { //testing to be done
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -161,7 +171,19 @@ func InviteToEvent(c *gin.Context) {
 	}
 
 	var information map[string]string
-	json.NewDecoder(c.Request.Body).Decode(&information) // email && eventName (id || name)
+	json.NewDecoder(c.Request.Body).Decode(&information) // email && eventName && token (id || name)
+
+	_, accountType, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
+		return
+	}
+
+	if accountType != "librarian" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can invite people to events"})
+		return
+	}
 
 	var user User
 	err = conn.QueryRow(context.Background(), "select id, email, name from authentication where email = $1;", information["email"]).Scan(&user.ID, &user.Email, &user.Name)
@@ -205,13 +227,7 @@ func InviteToEvent(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func GetInvited(c *gin.Context) {
-	if CurrentProfile.Type != "librarian" {
-		log.Println("Only librarians can view who is invited to an event")
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can view who is invited to an event"})
-		return
-	}
-
+func GetInvited(c *gin.Context) { //testing to be done
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -227,8 +243,24 @@ func GetInvited(c *gin.Context) {
 		return
 	}
 
+	var information map[string]string
 	var event Event
-	json.NewDecoder(c.Request.Body).Decode(&event) // name && (description || start)
+	json.NewDecoder(c.Request.Body).Decode(&information) // name && (description || start)
+
+	_, accountType, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
+		return
+	}
+
+	if accountType != "librarian" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can view who is invited to an event"})
+		return
+	}
+
+	event.Name = information["name"]
+
 	var invited string
 	err = conn.QueryRow(context.Background(), "select invited from events where name = $1 order by start desc;", event.Name).Scan(&invited)
 	if err != nil {
@@ -296,12 +328,6 @@ func GetEvents(c *gin.Context) {
 }
 
 func GetUserHistory(c *gin.Context) {
-	if CurrentProfile.Type != "librarian" {
-		log.Println("Only librarians can view the history of users")
-		c.JSON(http.StatusForbidden, gin.H{"error": "Only librarians can view the history of users"})
-		return
-	}
-
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -313,6 +339,21 @@ func GetUserHistory(c *gin.Context) {
 	err = CreateAuthTable(conn)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		return
+	}
+
+	var information map[string]string
+	json.NewDecoder(c.Request.Body).Decode(&information) //token
+
+	_, accoutnType, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
+		return
+	}
+
+	if accoutnType != "librarian" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Only librarians can view the history of users"})
 		return
 	}
 

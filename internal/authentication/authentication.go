@@ -212,6 +212,7 @@ func GetCurrentProfile(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error couldn't connect to the database"})
 		return
 	}
+	defer conn.Close(context.Background())
 
 	var tokenString map[string]string
 	json.NewDecoder(c.Request.Body).Decode(&tokenString)
