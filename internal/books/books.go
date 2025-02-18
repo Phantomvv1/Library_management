@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"time"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
@@ -25,8 +26,8 @@ type Book struct {
 	Quantity int    `json:"quantity"`
 }
 
-func borrowBook(conn *pgx.Conn, book Book, returnDate time.Time) error {
-	_, err := conn.Exec(context.Background(), "insert into borrowed_books (book_id, user_id, return_date) values ($1, $2, $3)", book.ID, CurrentProfile.ID, returnDate)
+func borrowBook(conn *pgx.Conn, userID int, book Book, returnDate time.Time) error {
+	_, err := conn.Exec(context.Background(), "insert into borrowed_books (book_id, user_id, return_date) values ($1, $2, $3)", book.ID, userID, returnDate)
 	if err != nil {
 		log.Println(err)
 		return errors.New("Unable to put the information about the borrowed book in the table")
@@ -58,8 +59,6 @@ func updateHistory(conn *pgx.Conn, book Book, userID int) error {
 			return nil
 		}
 	}
-
-	CurrentProfile.History = append(CurrentProfile.History, book.Title)
 
 	_, err = conn.Exec(context.Background(), "update authentication set history = array_append(history, $1) where id = $2;", book.Title, userID)
 	if err != nil {
@@ -162,19 +161,19 @@ func GetBooks(c *gin.Context) {
 
 	err = CreateAuthTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	err = CreateBookTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	bookList, err := getBooks(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -186,15 +185,41 @@ func GetBooks(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"books": bookList})
 }
 
-func AddBook(c *gin.Context) {
-	if CurrentProfile.Type != "librarian" {
-		log.Println("Users can't add books")
-		c.JSON(http.StatusForbidden, gin.H{"error": "Error users can't add books"})
+func AddBook(c *gin.Context) { //to be tested
+	var information map[string]string
+	var book Book
+	json.NewDecoder(c.Request.Body).Decode(&information) //isbn, title, author, year, quantity
+
+	_, accountType, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	var book Book
-	json.NewDecoder(c.Request.Body).Decode(&book) //isbn, title, author, year, quantity
+	if accountType != "librarian" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error users can't add books"})
+		return
+	}
+
+	book.ISBN = information["isbn"]
+	book.Title = information["title"]
+	book.Author = information["author"]
+	quantity, err := strconv.Atoi(information["quantity"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the quantity of the book"})
+		return
+	}
+	book.Quantity = quantity
+
+	year, err := strconv.Atoi(information["quantity"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the quantity of the book"})
+		return
+	}
+	book.Year = uint(year) //To make year a timestamp (time.Time)
 
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
@@ -238,13 +263,13 @@ func SearchForBook(c *gin.Context) {
 
 	err = CreateAuthTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	err = CreateBookTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -254,7 +279,7 @@ func SearchForBook(c *gin.Context) {
 	bookList, err := getBooks(conn)
 	if err != nil {
 		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -281,7 +306,7 @@ func SearchForBook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"books": matchedNames})
 }
 
-func BorrowBook(c *gin.Context) {
+func BorrowBook(c *gin.Context) { //to be tested
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -292,26 +317,33 @@ func BorrowBook(c *gin.Context) {
 
 	err = CreateAuthTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	err = CreateBookTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err = createBorrowedBooksTable(conn); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	var returnDateMap map[string]string
-	json.NewDecoder(c.Request.Body).Decode(&returnDateMap) //title && returnDate (author | isbn | year | id)
+	var information map[string]string
+	json.NewDecoder(c.Request.Body).Decode(&information) //title && returnDate (author | isbn | year | id)
+
+	id, _, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
 
 	var book Book
-	book.Title = returnDateMap["title"]
+	book.Title = information["title"]
 
 	_, err = conn.Exec(context.Background(), "update books set quantity = quantity - 1 where title = $1 and quantity > 0;", book.Title)
 	if err != nil {
@@ -320,7 +352,7 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
-	err = conn.QueryRow(context.Background(), "select id, quantity from books b where b.title = $1", book.Title).Scan(&book.ID, &book.Quantity)
+	err = conn.QueryRow(context.Background(), "select id, quantity from books b where b.title = $1;", book.Title).Scan(&book.ID, &book.Quantity)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error viewing the quantity of the book"})
@@ -333,25 +365,19 @@ func BorrowBook(c *gin.Context) {
 		return
 	}
 
-	if CurrentProfile.ID == 0 {
-		log.Println("Not logged in")
-		c.JSON(http.StatusForbidden, gin.H{"error": "You need to log in, in order to borrow a book"})
-		return
-	}
-
-	returnDate, err := time.Parse(time.DateOnly, returnDateMap["returnDate"])
+	returnDate, err := time.Parse(time.RFC3339, information["returnDate"])
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the return date."})
 		return
 	}
 
-	if err = borrowBook(conn, book, returnDate); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+	if err = borrowBook(conn, id, book, returnDate); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
-	if err = updateHistory(conn, book, CurrentProfile.ID); err != nil {
+	if err = updateHistory(conn, book, id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the history of the person"})
 		return
 	}
@@ -359,7 +385,7 @@ func BorrowBook(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func ReturnBook(c *gin.Context) {
+func ReturnBook(c *gin.Context) { //to be tested
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -370,28 +396,38 @@ func ReturnBook(c *gin.Context) {
 
 	err = CreateAuthTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	err = CreateBookTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err = CreateBookReservationsTable(conn); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err = createBorrowedBooksTable(conn); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	var information map[string]string
 	var book Book
-	json.NewDecoder(c.Request.Body).Decode(&book) //title
+	json.NewDecoder(c.Request.Body).Decode(&information) //title
+
+	id, _, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	book.Title = information["title"]
 
 	err = conn.QueryRow(context.Background(), "select id, isbn, title, author, year, quantity from books b where b.title = $1;", book.Title).Scan(
 		&book.ID, &book.ISBN, &book.Title, &book.Author, &book.Year, &book.Quantity)
@@ -401,14 +437,8 @@ func ReturnBook(c *gin.Context) {
 		return
 	}
 
-	if CurrentProfile.ID == 0 {
-		log.Println("The user hasn't logged in")
-		c.JSON(http.StatusForbidden, gin.H{"error": "You haven't logged in. You must be logged in, in order to return a book."})
-		return
-	}
-
-	var id int
-	err = conn.QueryRow(context.Background(), "delete from borrowed_books where book_id = $1 and user_id = $2 returning id;", book.ID, CurrentProfile.ID).Scan(&id)
+	var check int
+	err = conn.QueryRow(context.Background(), "delete from borrowed_books where book_id = $1 and user_id = $2 returning id;", book.ID, id).Scan(&check)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			c.JSON(http.StatusForbidden, gin.H{"message": "You can't return a book that you haven't borrowed or you have already returned"})
@@ -427,18 +457,44 @@ func ReturnBook(c *gin.Context) {
 	}
 
 	if err = borrowReservedBooks(conn, book); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, nil)
 }
 
-func GetHistory(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"history": CurrentProfile.History})
+func GetHistory(c *gin.Context) { //to be tested
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	var information map[string]string
+	json.NewDecoder(c.Request.Body).Decode(&information)
+
+	id, _, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	var history []string
+	err = conn.QueryRow(context.Background(), "select history books b where b.id = $1;", id).Scan(&history)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the history from the database"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"history": history})
 }
 
-func ReserveBook(c *gin.Context) {
+func ReserveBook(c *gin.Context) { // to be tested
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -449,29 +505,33 @@ func ReserveBook(c *gin.Context) {
 
 	err = CreateAuthTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	err = CreateBookTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	if err = CreateBookReservationsTable(conn); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	var information map[string]string
 	var book Book
-	json.NewDecoder(c.Request.Body).Decode(&book) //title & (author | isbn | year | id)
+	json.NewDecoder(c.Request.Body).Decode(&information) //title & (author | isbn | year | id)
 
-	if CurrentProfile.ID == 0 {
-		log.Println("Not logged in")
-		c.JSON(http.StatusForbidden, gin.H{"error": "You need to log in, in order to reserve a book"})
+	id, _, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
 		return
 	}
+
+	book.Title = information["title"]
 
 	err = conn.QueryRow(context.Background(), "select id, isbn, title, author, year, quantity from books b where b.title = $1;", book.Title).Scan(
 		&book.ID, &book.ISBN, &book.Title, &book.Author, &book.Year, &book.Quantity)
@@ -486,7 +546,7 @@ func ReserveBook(c *gin.Context) {
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "insert into book_reservations (book_id, user_id) values ($1, $2);", book.ID, CurrentProfile.ID)
+	_, err = conn.Exec(context.Background(), "insert into book_reservations (book_id, user_id) values ($1, $2);", book.ID, id)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error reserving the book"})
@@ -496,13 +556,7 @@ func ReserveBook(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func UpdateBookQuantity(c *gin.Context) {
-	if CurrentProfile.Type != "librarian" {
-		log.Println("Users can't update the quantity of books")
-		c.JSON(http.StatusForbidden, gin.H{"error": "Error users can't update the quantity of books"})
-		return
-	}
-
+func UpdateBookQuantity(c *gin.Context) { // to be tested
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -513,18 +567,45 @@ func UpdateBookQuantity(c *gin.Context) {
 
 	err = CreateAuthTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	err = CreateBookTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	var information map[string]string
 	var book Book
-	json.NewDecoder(c.Request.Body).Decode(&book) // id && quantity
+	json.NewDecoder(c.Request.Body).Decode(&information) // id && quantity && token
+
+	_, accountType, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	if accountType != "librarian" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error users can't update the quantity of books"})
+		return
+	}
+
+	book.ID, err = strconv.Atoi(information["id"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the id of the book"})
+	}
+
+	book.Quantity, err = strconv.Atoi(information["quantity"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the id of the book"})
+		return
+	}
+
 	_, err = conn.Exec(context.Background(), "update books set quantity = $1 where id = $2;", book.Quantity, book.ID)
 	if err != nil {
 		log.Println(err)
@@ -543,7 +624,7 @@ func UpdateBookQuantity(c *gin.Context) {
 	if book.Quantity > rowsCount {
 		for range rowsCount {
 			if err = borrowReservedBooks(conn, book); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 
@@ -551,7 +632,7 @@ func UpdateBookQuantity(c *gin.Context) {
 	} else {
 		for range book.Quantity {
 			if err = borrowReservedBooks(conn, book); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 		}
@@ -560,13 +641,7 @@ func UpdateBookQuantity(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func RemoveBook(c *gin.Context) {
-	if CurrentProfile.Type != "librarian" {
-		log.Println("Users can't remove books")
-		c.JSON(http.StatusForbidden, gin.H{"error": "Error users can't remove books"})
-		return
-	}
-
+func RemoveBook(c *gin.Context) { // to be tested
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -577,18 +652,39 @@ func RemoveBook(c *gin.Context) {
 
 	err = CreateAuthTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
 	err = CreateBookTable(conn)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	var information map[string]string
 	var book Book
-	json.NewDecoder(c.Request.Body).Decode(&book) // id && (title || description)
+	json.NewDecoder(c.Request.Body).Decode(&information) // id && (title || description)
+
+	_, accountType, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	if accountType != "librarian" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error users can't remove books"})
+		return
+	}
+
+	book.ID, err = strconv.Atoi(information["id"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the id of the book"})
+		return
+	}
+
 	_, err = conn.Exec(context.Background(), "delete from books b where b.id = $1", book.ID)
 	if err != nil {
 		log.Println(err)
