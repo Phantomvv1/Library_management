@@ -25,8 +25,6 @@ type Profile struct {
 	History []string `json:"history"`
 }
 
-var CurrentProfile Profile
-
 func GenerateJWT(id int, accountType string, email string) (string, error) {
 	claims := jwt.MapClaims{
 		"id":         id,

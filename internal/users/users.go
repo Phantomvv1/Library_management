@@ -69,13 +69,66 @@ func GetUsers(c *gin.Context) {
 }
 
 func EditProfile(c *gin.Context) {
-	var edit User
-	json.NewDecoder(c.Request.Body).Decode(&edit) //name, email
+	information := make(map[string]string)
+	json.NewDecoder(c.Request.Body).Decode(&information) //name, email
 
-	if edit.Name != CurrentProfile.Name && edit.Name != "" {
-		CurrentProfile.Name = edit.Name
+	id, _, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
 	}
-	if edit.Email != "" {
-		CurrentProfile.Email = edit.Email
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error connecting to the database"})
+		return
 	}
+	defer conn.Close(context.Background())
+
+	var name, email, accountType string
+	err = conn.QueryRow(context.Background(), "select name, email, type from authentication a where a.id = $1", id).Scan(&name, &email, &accountType)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting information from the database"})
+		return
+	}
+
+	createNewToken := false
+	if name != information["name"] && information["name"] != "" {
+		name = information["name"]
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error invalid new name"})
+		return
+	}
+
+	if email != information["email"] && information["email"] != "" {
+		email = information["email"]
+		createNewToken = true
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error invalid new email"})
+		return
+	}
+
+	_, err = conn.Exec(context.Background(), "update authentication set name = $1, email = $2 where id = $3", name, email, id)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error updating the information in the databse"})
+		return
+	}
+
+	if createNewToken {
+		token, err := GenerateJWT(id, accountType, email)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{"token": token})
+		return
+	}
+
+	c.JSON(http.StatusOK, nil)
 }

@@ -118,7 +118,7 @@ func CreateBookTable(conn *pgx.Conn) error {
 		"quantity int);")
 	if err != nil {
 		log.Println(err)
-		return errors.New("Couldn't create a table")
+		return errors.New("Couldn't create a table for books")
 	}
 
 	return nil
