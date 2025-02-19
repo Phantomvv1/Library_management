@@ -726,7 +726,7 @@ func GetBooksOverdue(c *gin.Context) {
 		return
 	}
 
-	var bookIDs, userIDs []int
+	overdueIDs := make(map[int]int) // key: UserID; value: bookID
 	for rows.Next() {
 		var bookID, userID int
 		err = rows.Scan(&bookID, &userID)
@@ -736,8 +736,7 @@ func GetBooksOverdue(c *gin.Context) {
 			return
 		}
 
-		bookIDs = append(bookIDs, bookID)
-		userIDs = append(userIDs, userID)
+		overdueIDs[userID] = bookID
 	}
 
 	if rows.Err() != nil {
