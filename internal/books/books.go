@@ -694,3 +694,55 @@ func RemoveBook(c *gin.Context) { // to be tested
 
 	c.JSON(http.StatusOK, nil)
 }
+
+func GetBooksOverdue(c *gin.Context) {
+	information := make(map[string]string)
+	json.NewDecoder(c.Request.Body).Decode(&information)
+
+	_, accoutType, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	if accoutType != "librarian" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User's can't view all of the books that are overdue"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error couldn't connect to the databse"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	rows, err := conn.Query(context.Background(), "select book_id, user_id from borrowed_books bb where current_timestamp > bb.return_date")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting information from the database"})
+		return
+	}
+
+	var bookIDs, userIDs []int
+	for rows.Next() {
+		var bookID, userID int
+		err = rows.Scan(&bookID, &userID)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the data"})
+			return
+		}
+
+		bookIDs = append(bookIDs, bookID)
+		userIDs = append(userIDs, userID)
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while working with the data"})
+		return
+	}
+}
