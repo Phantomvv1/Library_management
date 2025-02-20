@@ -13,6 +13,7 @@ import (
 	"time"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
+	. "github.com/Phantomvv1/Library_management/internal/users"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 )
@@ -719,13 +720,32 @@ func GetBooksOverdue(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	rows, err := conn.Query(context.Background(), "select book_id, user_id from borrowed_books bb where current_timestamp > bb.return_date")
-	if err != nil {
+	if err = CreateBookTable(conn); err != nil {
 		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting information from the database"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 
+	if err = CreateAuthTable(conn); err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err = createBorrowedBooksTable(conn); err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	rows, err := conn.Query(context.Background(), "select book_id, user_id from borrowed_books bb where current_timestamp > bb.return_date")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the users from the database"})
+		return
+	}
+
+	var userIDs []int
 	overdueIDs := make(map[int]int) // key: UserID; value: bookID
 	for rows.Next() {
 		var bookID, userID int
@@ -737,6 +757,7 @@ func GetBooksOverdue(c *gin.Context) {
 		}
 
 		overdueIDs[userID] = bookID
+		userIDs = append(userIDs, userID)
 	}
 
 	if rows.Err() != nil {
@@ -744,4 +765,40 @@ func GetBooksOverdue(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while working with the data"})
 		return
 	}
+
+	users := []User{}
+	for _, id := range userIDs { // This is very bad but I can't think of another way to do it
+		var name, email string
+		err := conn.QueryRow(context.Background(), "select name, email from authentication where id = $1;", id).Scan(&name, &email)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting users from the database"})
+			return
+		}
+
+		users = append(users, User{ID: id, Name: name, Email: email})
+	}
+
+	books := []Book{}
+	for _, bookID := range overdueIDs { // This is very bad but I can't think of another way to do it x2
+		var isbn, title, author string
+		var quantity int
+		var year uint
+		err := conn.QueryRow(context.Background(), "select isbn, title, author, quantity, year from books where id = $1;", bookID).Scan(&isbn,
+			&title, &author, &quantity, &year)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting users from the database"})
+			return
+		}
+
+		books = append(books, Book{ID: bookID, ISBN: isbn, Title: title, Author: author, Quantity: quantity, Year: year})
+	}
+
+	result := make(map[User]Book)
+	for i, user := range users {
+		result[user] = books[i]
+	}
+
+	c.JSON(http.StatusOK, result)
 }
