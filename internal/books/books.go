@@ -696,7 +696,7 @@ func RemoveBook(c *gin.Context) { // to be tested
 	c.JSON(http.StatusOK, nil)
 }
 
-func GetBooksOverdue(c *gin.Context) {
+func GetBooksOverdue(c *gin.Context) { // to be tested
 	information := make(map[string]string)
 	json.NewDecoder(c.Request.Body).Decode(&information)
 
@@ -745,8 +745,7 @@ func GetBooksOverdue(c *gin.Context) {
 		return
 	}
 
-	var userIDs []int
-	overdueIDs := make(map[int]int) // key: UserID; value: bookID
+	var userIDs, bookIDs []int
 	for rows.Next() {
 		var bookID, userID int
 		err = rows.Scan(&bookID, &userID)
@@ -756,7 +755,7 @@ func GetBooksOverdue(c *gin.Context) {
 			return
 		}
 
-		overdueIDs[userID] = bookID
+		bookIDs = append(bookIDs, bookID)
 		userIDs = append(userIDs, userID)
 	}
 
@@ -767,32 +766,72 @@ func GetBooksOverdue(c *gin.Context) {
 	}
 
 	users := []User{}
-	for _, id := range userIDs { // This is very bad but I can't think of another way to do it
+	query := "select name, email from authentication where id = $1"
+	for i := range userIDs {
+		if i == 0 {
+			continue
+		}
+
+		query = query + " or id = $" + string(byte(i+'1'))
+	}
+	query = query + ";"
+	fmt.Println(query) //for debugging purposes
+
+	rows, err = conn.Query(context.Background(), query, userIDs)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting users from the database"})
+		return
+	}
+
+	i := 0
+	for rows.Next() {
 		var name, email string
-		err := conn.QueryRow(context.Background(), "select name, email from authentication where id = $1;", id).Scan(&name, &email)
+		err = rows.Scan(&name, &email)
 		if err != nil {
 			log.Println(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting users from the database"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the users from the database"})
 			return
 		}
 
-		users = append(users, User{ID: id, Name: name, Email: email})
+		users = append(users, User{ID: userIDs[i], Name: name, Email: email})
+		i++
 	}
 
 	books := []Book{}
-	for _, bookID := range overdueIDs { // This is very bad but I can't think of another way to do it x2
+	query = "select isbn, title, author, quantity, year from books where id = $1"
+	for i := range userIDs {
+		if i == 0 {
+			continue
+		}
+
+		query = query + " or id = $" + string(byte(i+'1'))
+	}
+	query = query + ";"
+	fmt.Println(query) //for debugging purposes
+
+	rows, err = conn.Query(context.Background(), query, bookIDs)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting users from the database"})
+		return
+	}
+
+	i = 0
+	for rows.Next() {
 		var isbn, title, author string
 		var quantity int
 		var year uint
-		err := conn.QueryRow(context.Background(), "select isbn, title, author, quantity, year from books where id = $1;", bookID).Scan(&isbn,
-			&title, &author, &quantity, &year)
+
+		err = rows.Scan(&isbn, &title, &author, &quantity, &year)
 		if err != nil {
 			log.Println(err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting users from the database"})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the books from the database"})
 			return
 		}
 
-		books = append(books, Book{ID: bookID, ISBN: isbn, Title: title, Author: author, Quantity: quantity, Year: year})
+		books = append(books, Book{ID: bookIDs[i], ISBN: isbn, Title: title, Author: author, Quantity: quantity, Year: year})
+		i++
 	}
 
 	result := make(map[User]Book)
