@@ -788,7 +788,6 @@ func GetBooksOverdue(c *gin.Context) { // to be tested
 		args = append(args, userID)
 	}
 	query += ");"
-	fmt.Println(query) //for debugging purposes
 
 	rows, err = conn.Query(context.Background(), query, args...)
 	if err != nil {
@@ -829,7 +828,6 @@ func GetBooksOverdue(c *gin.Context) { // to be tested
 		args = append(args, bookID)
 	}
 	query += ");"
-	fmt.Println(query) //for debugging purposes
 
 	rows, err = conn.Query(context.Background(), query, args...)
 	if err != nil {
@@ -862,9 +860,14 @@ func GetBooksOverdue(c *gin.Context) { // to be tested
 		return
 	}
 
-	result := make(map[User]Book)
+	type returnType struct {
+		User User `json:"user"`
+		Book Book `json:"book"`
+	}
+
+	result := []returnType{}
 	for i, user := range users {
-		result[user] = books[i]
+		result = append(result, returnType{User: user, Book: books[i]})
 	}
 
 	c.JSON(http.StatusOK, result)
