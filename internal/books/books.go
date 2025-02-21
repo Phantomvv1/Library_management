@@ -13,6 +13,7 @@ import (
 	"time"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
+	. "github.com/Phantomvv1/Library_management/internal/users"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 )
@@ -306,7 +307,7 @@ func SearchForBook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"books": matchedNames})
 }
 
-func BorrowBook(c *gin.Context) { //to be tested
+func BorrowBook(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -365,7 +366,7 @@ func BorrowBook(c *gin.Context) { //to be tested
 		return
 	}
 
-	returnDate, err := time.Parse(time.RFC3339, information["returnDate"])
+	returnDate, err := time.Parse(time.DateOnly, information["returnDate"])
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the return date."})
@@ -693,4 +694,181 @@ func RemoveBook(c *gin.Context) { // to be tested
 	}
 
 	c.JSON(http.StatusOK, nil)
+}
+
+func GetBooksOverdue(c *gin.Context) { // to be tested
+	information := make(map[string]string)
+	json.NewDecoder(c.Request.Body).Decode(&information)
+
+	_, accoutType, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	if accoutType != "librarian" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User's can't view all of the books that are overdue"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error couldn't connect to the databse"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	if err = CreateBookTable(conn); err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err = CreateAuthTable(conn); err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err = createBorrowedBooksTable(conn); err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	count := 0
+	err = conn.QueryRow(context.Background(), "select count(*) from borrowed_books bb where current_timestamp > bb.return_date;").Scan(&count)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while checking if there are books that are overdue"})
+		return
+	}
+	if count == 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "There aren't any books that are overdue"})
+		return
+	}
+
+	rows, err := conn.Query(context.Background(), "select book_id, user_id from borrowed_books bb where current_timestamp > bb.return_date")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the users from the database"})
+		return
+	}
+
+	var userIDs, bookIDs []int
+	for rows.Next() {
+		var bookID, userID int
+		err = rows.Scan(&bookID, &userID)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the data"})
+			return
+		}
+
+		bookIDs = append(bookIDs, bookID)
+		userIDs = append(userIDs, userID)
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while working with the data"})
+		return
+	}
+
+	args := []interface{}{}
+	query := "select name, email from authentication where id in ("
+	for i, userID := range userIDs {
+		if i > 0 {
+			query += ", "
+		}
+
+		query = query + fmt.Sprintf("$%d", i+1)
+		args = append(args, userID)
+	}
+	query += ");"
+
+	rows, err = conn.Query(context.Background(), query, args...)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting users from the database"})
+		return
+	}
+
+	i := 0
+	users := []User{}
+	for rows.Next() {
+		var name, email string
+		err = rows.Scan(&name, &email)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the users from the database"})
+			return
+		}
+
+		users = append(users, User{ID: userIDs[i], Name: name, Email: email})
+		i++
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the user data"})
+		return
+	}
+
+	args = []interface{}{}
+	query = "select isbn, title, author, quantity, year from books where id in ("
+	for i, bookID := range bookIDs {
+		if i > 0 {
+			query += ", "
+		}
+
+		query = query + fmt.Sprintf("$%d", i+1)
+		args = append(args, bookID)
+	}
+	query += ");"
+
+	rows, err = conn.Query(context.Background(), query, args...)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting users from the database"})
+		return
+	}
+
+	i = 0
+	books := []Book{}
+	for rows.Next() {
+		var isbn, title, author string
+		var quantity int
+		var year uint
+
+		err = rows.Scan(&isbn, &title, &author, &quantity, &year)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the books from the database"})
+			return
+		}
+
+		books = append(books, Book{ID: bookIDs[i], ISBN: isbn, Title: title, Author: author, Quantity: quantity, Year: year})
+		i++
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the book data"})
+		return
+	}
+
+	type returnType struct {
+		User User `json:"user"`
+		Book Book `json:"book"`
+	}
+
+	result := []returnType{}
+	for i, user := range users {
+		result = append(result, returnType{User: user, Book: books[i]})
+	}
+
+	c.JSON(http.StatusOK, result)
 }
