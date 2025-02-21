@@ -307,7 +307,7 @@ func SearchForBook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"books": matchedNames})
 }
 
-func BorrowBook(c *gin.Context) { //to be tested
+func BorrowBook(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -366,7 +366,7 @@ func BorrowBook(c *gin.Context) { //to be tested
 		return
 	}
 
-	returnDate, err := time.Parse(time.RFC3339, information["returnDate"])
+	returnDate, err := time.Parse(time.DateOnly, information["returnDate"])
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the return date."})
@@ -738,6 +738,18 @@ func GetBooksOverdue(c *gin.Context) { // to be tested
 		return
 	}
 
+	count := 0
+	err = conn.QueryRow(context.Background(), "select count(*) from borrowed_books bb where current_timestamp > bb.return_date;").Scan(&count)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while checking if there are books that are overdue"})
+		return
+	}
+	if count == 0 {
+		c.JSON(http.StatusOK, gin.H{"message": "There aren't any books that are overdue"})
+		return
+	}
+
 	rows, err := conn.Query(context.Background(), "select book_id, user_id from borrowed_books bb where current_timestamp > bb.return_date")
 	if err != nil {
 		log.Println(err)
@@ -765,19 +777,20 @@ func GetBooksOverdue(c *gin.Context) { // to be tested
 		return
 	}
 
-	users := []User{}
-	query := "select name, email from authentication where id = $1"
-	for i := range userIDs {
-		if i == 0 {
-			continue
+	args := []interface{}{}
+	query := "select name, email from authentication where id in ("
+	for i, userID := range userIDs {
+		if i > 0 {
+			query += ", "
 		}
 
-		query = query + " or id = $" + string(byte(i+'1'))
+		query = query + fmt.Sprintf("$%d", i+1)
+		args = append(args, userID)
 	}
-	query = query + ";"
+	query += ");"
 	fmt.Println(query) //for debugging purposes
 
-	rows, err = conn.Query(context.Background(), query, userIDs)
+	rows, err = conn.Query(context.Background(), query, args...)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting users from the database"})
@@ -785,6 +798,7 @@ func GetBooksOverdue(c *gin.Context) { // to be tested
 	}
 
 	i := 0
+	users := []User{}
 	for rows.Next() {
 		var name, email string
 		err = rows.Scan(&name, &email)
@@ -798,19 +812,26 @@ func GetBooksOverdue(c *gin.Context) { // to be tested
 		i++
 	}
 
-	books := []Book{}
-	query = "select isbn, title, author, quantity, year from books where id = $1"
-	for i := range userIDs {
-		if i == 0 {
-			continue
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the user data"})
+		return
+	}
+
+	args = []interface{}{}
+	query = "select isbn, title, author, quantity, year from books where id in ("
+	for i, bookID := range bookIDs {
+		if i > 0 {
+			query += ", "
 		}
 
-		query = query + " or id = $" + string(byte(i+'1'))
+		query = query + fmt.Sprintf("$%d", i+1)
+		args = append(args, bookID)
 	}
-	query = query + ";"
+	query += ");"
 	fmt.Println(query) //for debugging purposes
 
-	rows, err = conn.Query(context.Background(), query, bookIDs)
+	rows, err = conn.Query(context.Background(), query, args...)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting users from the database"})
@@ -818,6 +839,7 @@ func GetBooksOverdue(c *gin.Context) { // to be tested
 	}
 
 	i = 0
+	books := []Book{}
 	for rows.Next() {
 		var isbn, title, author string
 		var quantity int
@@ -832,6 +854,12 @@ func GetBooksOverdue(c *gin.Context) { // to be tested
 
 		books = append(books, Book{ID: bookIDs[i], ISBN: isbn, Title: title, Author: author, Quantity: quantity, Year: year})
 		i++
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the book data"})
+		return
 	}
 
 	result := make(map[User]Book)

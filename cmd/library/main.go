@@ -33,6 +33,7 @@ func main() {
 	r.POST("/event/invite", InviteToEvent)
 	r.POST("/book/quantity", UpdateBookQuantity)
 	r.POST("/book/remove", RemoveBook)
+	r.POST("/book/overdue", GetBooksOverdue)
 
 	r.Run(":42069")
 }
