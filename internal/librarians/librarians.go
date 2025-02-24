@@ -100,7 +100,7 @@ func GetLibrarians(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"librarians": librarianList})
 }
 
-func CreateEvent(c *gin.Context) { //testing needed
+func CreateEvent(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -153,7 +153,7 @@ func CreateEvent(c *gin.Context) { //testing needed
 	c.JSON(http.StatusOK, nil)
 }
 
-func InviteToEvent(c *gin.Context) { //testing to be done
+func InviteToEvent(c *gin.Context) { // needs fixing for multiple events with the same name
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -226,7 +226,7 @@ func InviteToEvent(c *gin.Context) { //testing to be done
 	c.JSON(http.StatusOK, nil)
 }
 
-func GetInvited(c *gin.Context) { //testing to be done
+func GetInvited(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)

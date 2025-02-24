@@ -186,7 +186,7 @@ func GetBooks(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"books": bookList})
 }
 
-func AddBook(c *gin.Context) { //to be tested
+func AddBook(c *gin.Context) {
 	var information map[string]string
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&information) //isbn, title, author, year, quantity
@@ -203,24 +203,24 @@ func AddBook(c *gin.Context) { //to be tested
 		return
 	}
 
+	fmt.Println(information)
 	book.ISBN = information["isbn"]
 	book.Title = information["title"]
 	book.Author = information["author"]
-	quantity, err := strconv.Atoi(information["quantity"])
+	book.Quantity, err = strconv.Atoi(information["quantity"])
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the quantity of the book"})
 		return
 	}
-	book.Quantity = quantity
 
-	year, err := strconv.Atoi(information["quantity"])
+	year, err := strconv.Atoi(information["year"])
 	if err != nil {
 		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the quantity of the book"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the year of the book"})
 		return
 	}
-	book.Year = uint(year) //To make year a timestamp (time.Time)
+	book.Year = uint(year) //To make year an bigger integer and not uint
 
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
