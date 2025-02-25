@@ -126,7 +126,7 @@ func CreateBookTable(conn *pgx.Conn) error {
 }
 func getBooks(conn *pgx.Conn) ([]Book, error) {
 	var bookList []Book
-	rows, err := conn.Query(context.Background(), "select id, isbn, title, author, year, quantity from books;")
+	rows, err := conn.Query(context.Background(), "select id, isbn, title, author, year, quantity from books order by id;")
 	if err != nil {
 		log.Println(err)
 		return nil, errors.New("Failed to fetch books")
@@ -386,7 +386,7 @@ func BorrowBook(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func ReturnBook(c *gin.Context) { //to be tested
+func ReturnBook(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -465,7 +465,7 @@ func ReturnBook(c *gin.Context) { //to be tested
 	c.JSON(http.StatusOK, nil)
 }
 
-func GetHistory(c *gin.Context) { //to be tested
+func GetHistory(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -485,7 +485,7 @@ func GetHistory(c *gin.Context) { //to be tested
 	}
 
 	var history []string
-	err = conn.QueryRow(context.Background(), "select history books b where b.id = $1;", id).Scan(&history)
+	err = conn.QueryRow(context.Background(), "select history from authentication a where a.id = $1;", id).Scan(&history)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the history from the database"})
@@ -495,7 +495,7 @@ func GetHistory(c *gin.Context) { //to be tested
 	c.JSON(http.StatusOK, gin.H{"history": history})
 }
 
-func ReserveBook(c *gin.Context) { // to be tested
+func ReserveBook(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -557,7 +557,7 @@ func ReserveBook(c *gin.Context) { // to be tested
 	c.JSON(http.StatusOK, nil)
 }
 
-func UpdateBookQuantity(c *gin.Context) { // to be tested
+func UpdateBookQuantity(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -578,11 +578,17 @@ func UpdateBookQuantity(c *gin.Context) { // to be tested
 		return
 	}
 
-	var information map[string]string
+	var information map[string]interface{}
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&information) // id && quantity && token
 
-	_, accountType, err := ValidateJWT(information["token"])
+	tokenString, ok := information["token"].(string)
+	if !ok {
+		log.Println("Token is not a string")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error token is not a string"})
+		return
+	}
+	_, accountType, err := ValidateJWT(tokenString)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
@@ -594,18 +600,21 @@ func UpdateBookQuantity(c *gin.Context) { // to be tested
 		return
 	}
 
-	book.ID, err = strconv.Atoi(information["id"])
-	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the id of the book"})
-	}
-
-	book.Quantity, err = strconv.Atoi(information["quantity"])
-	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the id of the book"})
+	id, ok := information["id"].(float64)
+	if !ok {
+		log.Println("ID is not an int")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error ID is not an int"})
 		return
 	}
+	book.ID = int(id)
+
+	quantity, ok := information["quantity"].(float64)
+	if !ok {
+		log.Println("Quantity of the book is not an int")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error quantity of the book is not an int"})
+		return
+	}
+	book.Quantity = int(quantity)
 
 	_, err = conn.Exec(context.Background(), "update books set quantity = $1 where id = $2;", book.Quantity, book.ID)
 	if err != nil {
@@ -642,7 +651,7 @@ func UpdateBookQuantity(c *gin.Context) { // to be tested
 	c.JSON(http.StatusOK, nil)
 }
 
-func RemoveBook(c *gin.Context) { // to be tested
+func RemoveBook(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -663,11 +672,17 @@ func RemoveBook(c *gin.Context) { // to be tested
 		return
 	}
 
-	var information map[string]string
+	var information map[string]interface{}
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&information) // id && (title || description)
 
-	_, accountType, err := ValidateJWT(information["token"])
+	tokenString, ok := information["token"].(string)
+	if !ok {
+		log.Println("Token is not a string")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error token is not a string"})
+		return
+	}
+	_, accountType, err := ValidateJWT(tokenString)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
@@ -679,12 +694,13 @@ func RemoveBook(c *gin.Context) { // to be tested
 		return
 	}
 
-	book.ID, err = strconv.Atoi(information["id"])
-	if err != nil {
-		log.Println(err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the id of the book"})
+	id, ok := information["id"].(float64)
+	if !ok {
+		log.Println("Id is not an int")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error id is not an int"})
 		return
 	}
+	book.ID = int(id)
 
 	_, err = conn.Exec(context.Background(), "delete from books b where b.id = $1", book.ID)
 	if err != nil {
@@ -696,7 +712,7 @@ func RemoveBook(c *gin.Context) { // to be tested
 	c.JSON(http.StatusOK, nil)
 }
 
-func GetBooksOverdue(c *gin.Context) { // to be tested
+func GetBooksOverdue(c *gin.Context) {
 	information := make(map[string]string)
 	json.NewDecoder(c.Request.Body).Decode(&information)
 
