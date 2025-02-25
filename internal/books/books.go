@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"regexp"
-	"strconv"
 	"time"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
@@ -23,7 +22,7 @@ type Book struct {
 	ISBN     string `json:"isbn"`
 	Title    string `json:"title"`
 	Author   string `json:"author"`
-	Year     uint   `json:"year"`
+	Year     int16  `json:"year"`
 	Quantity int    `json:"quantity"`
 }
 
@@ -187,11 +186,16 @@ func GetBooks(c *gin.Context) {
 }
 
 func AddBook(c *gin.Context) {
-	var information map[string]string
+	var information map[string]interface{}
 	var book Book
 	json.NewDecoder(c.Request.Body).Decode(&information) //isbn, title, author, year, quantity
 
-	_, accountType, err := ValidateJWT(information["token"])
+	tokenString, ok := information["token"].(string)
+	if !ok {
+		log.Println("Token is not a string")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error token is not a string"})
+	}
+	_, accountType, err := ValidateJWT(tokenString)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -203,24 +207,42 @@ func AddBook(c *gin.Context) {
 		return
 	}
 
-	fmt.Println(information)
-	book.ISBN = information["isbn"]
-	book.Title = information["title"]
-	book.Author = information["author"]
-	book.Quantity, err = strconv.Atoi(information["quantity"])
-	if err != nil {
+	book.ISBN, ok = information["isbn"].(string)
+	if !ok {
+		log.Println("ISBN is not a string")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error ISBN is not a string"})
+		return
+	}
+
+	book.Title, ok = information["title"].(string)
+	if !ok {
+		log.Println("Title is not a string")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error title is not a string"})
+		return
+	}
+
+	book.Author, ok = information["author"].(string)
+	if !ok {
+		log.Println("Author is not a string")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error author is not a string"})
+		return
+	}
+
+	quantity, ok := information["quantity"].(float64)
+	if !ok {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the quantity of the book"})
 		return
 	}
+	book.Quantity = int(quantity)
 
-	year, err := strconv.Atoi(information["year"])
-	if err != nil {
+	year, ok := information["year"].(float64)
+	if !ok {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the year of the book"})
 		return
 	}
-	book.Year = uint(year) //To make year an bigger integer and not uint
+	book.Year = int16(year) //To make year an bigger integer and not uint
 
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
@@ -857,7 +879,7 @@ func GetBooksOverdue(c *gin.Context) {
 	for rows.Next() {
 		var isbn, title, author string
 		var quantity int
-		var year uint
+		var year int16
 
 		err = rows.Scan(&isbn, &title, &author, &quantity, &year)
 		if err != nil {
