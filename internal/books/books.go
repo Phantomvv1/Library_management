@@ -195,6 +195,7 @@ func AddBook(c *gin.Context) {
 		log.Println("Token is not a string")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Error token is not a string"})
 	}
+
 	_, accountType, err := ValidateJWT(tokenString)
 	if err != nil {
 		log.Println(err)
@@ -242,7 +243,7 @@ func AddBook(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the year of the book"})
 		return
 	}
-	book.Year = int16(year) //To make year an bigger integer and not uint
+	book.Year = int16(year)
 
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {

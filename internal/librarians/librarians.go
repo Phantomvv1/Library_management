@@ -226,7 +226,7 @@ func InviteToEvent(c *gin.Context) { // needs fixing for multiple events with th
 	c.JSON(http.StatusOK, nil)
 }
 
-func GetInvited(c *gin.Context) {
+func GetInvited(c *gin.Context) { // alos needs fixing
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
