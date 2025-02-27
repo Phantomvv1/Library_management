@@ -153,7 +153,7 @@ func CreateEvent(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func InviteToEvent(c *gin.Context) { // needs fixing for multiple events with the same name
+func InviteToEvent(c *gin.Context) { // to be tested
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -169,10 +169,16 @@ func InviteToEvent(c *gin.Context) { // needs fixing for multiple events with th
 		return
 	}
 
-	var information map[string]string
-	json.NewDecoder(c.Request.Body).Decode(&information) // email && eventName && token (id || name)
+	var information map[string]interface{}
+	json.NewDecoder(c.Request.Body).Decode(&information) // email && eventName && token && eventId
 
-	_, accountType, err := ValidateJWT(information["token"])
+	tokenString, ok := information["token"].(string)
+	if !ok {
+		log.Println("Token is not of the correct type")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error token is not of the correct type"})
+		return
+	}
+	_, accountType, err := ValidateJWT(tokenString)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
@@ -184,8 +190,29 @@ func InviteToEvent(c *gin.Context) { // needs fixing for multiple events with th
 		return
 	}
 
+	eventId, ok := information["eventId"].(float64)
+	if !ok {
+		log.Println("eventId is not of the correct type")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error eventId is not of the correct type"})
+		return
+	}
+
+	email, ok := information["email"].(string)
+	if !ok {
+		log.Println("Email is not of the correct type")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error email is not of the correct type"})
+		return
+	}
+
+	eventName, ok := information["eventName"].(string)
+	if !ok {
+		log.Println("EventName is not of the correct type")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error the event name is not of the correct type"})
+		return
+	}
+
 	var user User
-	err = conn.QueryRow(context.Background(), "select id, email, name from authentication where email = $1;", information["email"]).Scan(&user.ID, &user.Email, &user.Name)
+	err = conn.QueryRow(context.Background(), "select id, email, name from authentication where email = $1;", email).Scan(&user.ID, &user.Email, &user.Name)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting information from the database"})
@@ -193,7 +220,7 @@ func InviteToEvent(c *gin.Context) { // needs fixing for multiple events with th
 	}
 
 	var invited string
-	err = conn.QueryRow(context.Background(), "select invited from events e where e.name = $1;", information["eventName"]).Scan(&invited)
+	err = conn.QueryRow(context.Background(), "select invited from events e where e.name = $1 and e.id = $2;", eventName, eventId).Scan(&invited)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inviting the person"})
@@ -226,7 +253,7 @@ func InviteToEvent(c *gin.Context) { // needs fixing for multiple events with th
 	c.JSON(http.StatusOK, nil)
 }
 
-func GetInvited(c *gin.Context) { // alos needs fixing
+func GetInvited(c *gin.Context) { // to be tested
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -242,11 +269,17 @@ func GetInvited(c *gin.Context) { // alos needs fixing
 		return
 	}
 
-	var information map[string]string
+	var information map[string]interface{}
 	var event Event
-	json.NewDecoder(c.Request.Body).Decode(&information) // name && (description || start)
+	json.NewDecoder(c.Request.Body).Decode(&information) // name && id && token
 
-	_, accountType, err := ValidateJWT(information["token"])
+	tokenString, ok := information["token"].(string)
+	if !ok {
+		log.Println("Token is not of the correct type")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error token is not of the correct type"})
+		return
+	}
+	_, accountType, err := ValidateJWT(tokenString)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
@@ -258,10 +291,23 @@ func GetInvited(c *gin.Context) { // alos needs fixing
 		return
 	}
 
-	event.Name = information["name"]
+	event.Name, ok = information["name"].(string)
+	if !ok {
+		log.Println("Name is not of the correct type")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error name is not of the correct type"})
+		return
+	}
+
+	id, ok := information["id"].(float64)
+	if !ok {
+		log.Println("Name is not of the correct type")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error name is not of the correct type"})
+		return
+	}
+	event.ID = int(id)
 
 	var invited string
-	err = conn.QueryRow(context.Background(), "select invited from events where name = $1 order by start desc;", event.Name).Scan(&invited)
+	err = conn.QueryRow(context.Background(), "select invited from events e where e.name = $1 and e.id = $2", event.Name, event.ID).Scan(&invited)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error there is no event with this name"})
