@@ -153,7 +153,7 @@ func CreateEvent(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func InviteToEvent(c *gin.Context) { // to be tested
+func InviteToEvent(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -170,7 +170,7 @@ func InviteToEvent(c *gin.Context) { // to be tested
 	}
 
 	var information map[string]interface{}
-	json.NewDecoder(c.Request.Body).Decode(&information) // email && eventName && token && eventId
+	json.NewDecoder(c.Request.Body).Decode(&information) // email && token && eventId
 
 	tokenString, ok := information["token"].(string)
 	if !ok {
@@ -204,13 +204,6 @@ func InviteToEvent(c *gin.Context) { // to be tested
 		return
 	}
 
-	eventName, ok := information["eventName"].(string)
-	if !ok {
-		log.Println("EventName is not of the correct type")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Error the event name is not of the correct type"})
-		return
-	}
-
 	var user User
 	err = conn.QueryRow(context.Background(), "select id, email, name from authentication where email = $1;", email).Scan(&user.ID, &user.Email, &user.Name)
 	if err != nil {
@@ -220,7 +213,7 @@ func InviteToEvent(c *gin.Context) { // to be tested
 	}
 
 	var invited string
-	err = conn.QueryRow(context.Background(), "select invited from events e where e.name = $1 and e.id = $2;", eventName, eventId).Scan(&invited)
+	err = conn.QueryRow(context.Background(), "select invited from events e where e.id = $1;", eventId).Scan(&invited)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error inviting the person"})
@@ -232,7 +225,7 @@ func InviteToEvent(c *gin.Context) { // to be tested
 	for _, email := range invitedArr {
 		if email == user.Email {
 			log.Println("The person has already been invited to this event")
-			c.JSON(http.StatusConflict, gin.H{"error": "The person has already been invited to this event"})
+			c.JSON(http.StatusConflict, gin.H{"error": "This person has already been invited to this event"})
 			return
 		}
 	}
@@ -253,7 +246,7 @@ func InviteToEvent(c *gin.Context) { // to be tested
 	c.JSON(http.StatusOK, nil)
 }
 
-func GetInvited(c *gin.Context) { // to be tested
+func GetInvited(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -291,13 +284,6 @@ func GetInvited(c *gin.Context) { // to be tested
 		return
 	}
 
-	event.Name, ok = information["name"].(string)
-	if !ok {
-		log.Println("Name is not of the correct type")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Error name is not of the correct type"})
-		return
-	}
-
 	id, ok := information["id"].(float64)
 	if !ok {
 		log.Println("Name is not of the correct type")
@@ -307,7 +293,7 @@ func GetInvited(c *gin.Context) { // to be tested
 	event.ID = int(id)
 
 	var invited string
-	err = conn.QueryRow(context.Background(), "select invited from events e where e.name = $1 and e.id = $2", event.Name, event.ID).Scan(&invited)
+	err = conn.QueryRow(context.Background(), "select invited from events e where e.id = $1", event.ID).Scan(&invited)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error there is no event with this name"})
