@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
 	"github.com/gin-gonic/gin"
@@ -131,4 +132,50 @@ func EditProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, nil)
+}
+
+func GetUserByID(c *gin.Context) {
+	var information map[string]string
+	json.NewDecoder(c.Request.Body).Decode(&information)
+
+	_, accountType, err := ValidateJWT(information["token"])
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		return
+	}
+
+	if accountType != "librarian" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error only librarians can get a certain user"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	params := c.Request.URL.Query()
+	idString := params.Get("id")
+	id, err := strconv.Atoi(idString)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to parse the id of the user"})
+		return
+	}
+
+	var user Profile
+	user.ID = id
+	user.Type = "user"
+	err = conn.QueryRow(context.Background(), "select name, email, history from authentication a where a.id = $1", id).Scan(&user.Name, &user.Email, &user.History)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the information abut the user from the database"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"user": user})
 }
