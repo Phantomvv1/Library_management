@@ -12,11 +12,12 @@ import (
 
 func main() {
 	r := gin.Default()
-	r.GET("/", func(c *gin.Context) { c.JSON(http.StatusOK, nil) })
+	r.Any("/", func(c *gin.Context) { c.JSON(http.StatusOK, nil) })
 	r.GET("/users", GetUsers)
 	r.GET("/books", GetBooks)
 	r.GET("/librarians", GetLibrarians)
 	r.GET("/events", GetEvents)
+	r.GET("/book", GetBookByID)
 	r.POST("/user", GetUserByID)
 	r.POST("/user/history", GetUserHistory)
 	r.POST("/history", GetHistory)

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"time"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
@@ -910,4 +911,44 @@ func GetBooksOverdue(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+func GetBookByID(c *gin.Context) {
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	params := c.Request.URL.Query()
+	idString := params.Get("id")
+	if idString == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error no id provided"})
+		return
+	}
+
+	id, err := strconv.Atoi(idString)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to parse the id of the book"})
+		return
+	}
+
+	var book Book
+	book.ID = id
+	err = conn.QueryRow(context.Background(), "select title, isbn, author, year from books b where b.id = $1", id).Scan(&book.Title, &book.ISBN, &book.Author, &book.Year)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Error there is no such book in this library"})
+			return
+		}
+
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get information from the database"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"book": book})
 }
