@@ -160,6 +160,11 @@ func GetUserByID(c *gin.Context) {
 
 	params := c.Request.URL.Query()
 	idString := params.Get("id")
+	if idString == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error id of the person you are searching for is missing"})
+		return
+	}
+
 	id, err := strconv.Atoi(idString)
 	if err != nil {
 		log.Println(err)
@@ -169,9 +174,13 @@ func GetUserByID(c *gin.Context) {
 
 	var user Profile
 	user.ID = id
-	user.Type = "user"
-	err = conn.QueryRow(context.Background(), "select name, email, history from authentication a where a.id = $1", id).Scan(&user.Name, &user.Email, &user.History)
+	err = conn.QueryRow(context.Background(), "select name, email, history, type from authentication a where a.id = $1", id).Scan(&user.Name, &user.Email, &user.History, &user.Type)
 	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Error there is user with this id"})
+			return
+		}
+
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the information abut the user from the database"})
 		return
