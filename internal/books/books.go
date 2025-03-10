@@ -952,3 +952,41 @@ func GetBookByID(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"book": book})
 }
+
+func GetAuthors(c *gin.Context) {
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error couldn't connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	var authors []string
+	rows, err := conn.Query(context.Background(), "select author from books b")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get information from the database"})
+		return
+	}
+
+	for rows.Next() {
+		var author string
+		err = rows.Scan(&author)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the authors data"})
+			return
+		}
+
+		authors = append(authors, author)
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the authors data"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"authors": authors})
+}
