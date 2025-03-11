@@ -27,6 +27,20 @@ type Book struct {
 	Quantity int    `json:"quantity"`
 }
 
+func cancelBookReservation(conn *pgx.Conn, userID, bookID int) error {
+	check := 0
+	err := conn.QueryRow(context.Background(), "delete from book_reservation where user_id = $1 and book_id = $2 returning id", userID, bookID).Scan(&check)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return errors.New("Error there was no reservation for a book with this id")
+		}
+
+		return errors.New("Error unable to get information from the database")
+	}
+
+	return nil
+}
+
 func borrowBook(conn *pgx.Conn, userID int, book Book, returnDate time.Time) error {
 	_, err := conn.Exec(context.Background(), "insert into borrowed_books (book_id, user_id, return_date) values ($1, $2, $3)", book.ID, userID, returnDate)
 	if err != nil {
@@ -1033,4 +1047,84 @@ func IsAvailable(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"available": false})
 		return
 	}
+}
+
+func CancelBookReservation(c *gin.Context) {
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	var information map[string]interface{}
+	json.NewDecoder(c.Request.Body).Decode(&information) // id || isbn || title (anything else will fail the important info check)
+
+	token, ok := information["token"].(string)
+	if !ok {
+		log.Println("Token is not provided correctly")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error token is not provided correctly"})
+		return
+	}
+
+	id, _, err := ValidateJWT(token)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
+		return
+	}
+
+	useID, useISBN, useTitle := false, false, false
+	title := ""
+	isbn := ""
+	bookID, ok := information["id"].(int)
+	if ok {
+		useID = true
+	} else if title, ok = information["title"].(string); ok {
+		useTitle = true
+	} else if isbn, ok = information["isbn"].(string); ok {
+		useTitle = true
+	} else {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error uanble to identify the requested book by the given parameters"})
+		return
+	}
+
+	if useID {
+		if err = cancelBookReservation(conn, id, bookID); err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	if useISBN {
+		err = conn.QueryRow(context.Background(), "select id from books b where b.isbn = $1", isbn).Scan(&bookID)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error uanble to get information about the book from the database"})
+			return
+		}
+
+		if err = cancelBookReservation(conn, id, bookID); err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+	if useTitle {
+		err = conn.QueryRow(context.Background(), "select id from books b where b.title = $1", title).Scan(&bookID)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error uanble to get information about the book from the database"})
+			return
+		}
+
+		if err = cancelBookReservation(conn, id, bookID); err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "The book reservation was canceled successfully"})
 }
