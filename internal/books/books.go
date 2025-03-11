@@ -266,7 +266,6 @@ func AddBook(c *gin.Context) {
 		return
 	}
 
-	fmt.Println(book)
 	_, err = conn.Exec(context.Background(), "insert into books (isbn, title, author, year, quantity) values ($1, $2, $3, $4, $5);",
 		book.ISBN, book.Title, book.Author, book.Year, book.Quantity)
 	if err != nil {
@@ -989,4 +988,49 @@ func GetAuthors(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"authors": authors})
+}
+
+func IsAvailable(c *gin.Context) {
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	params := c.Request.URL.Query()
+	idString := params.Get("id")
+	if idString == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error no id provided"})
+		return
+	}
+
+	id, err := strconv.Atoi(idString)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the id of the book"})
+		return
+	}
+
+	quantity := 0
+	err = conn.QueryRow(context.Background(), "select quantity from books b where b.id = $1", id).Scan(&quantity)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Error there is book with this id in this library"})
+			return
+		}
+
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get information from the database"})
+		return
+	}
+
+	if quantity > 0 {
+		c.JSON(http.StatusOK, gin.H{"available": true})
+		return
+	} else {
+		c.JSON(http.StatusOK, gin.H{"available": false})
+		return
+	}
 }
