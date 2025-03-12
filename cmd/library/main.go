@@ -20,6 +20,7 @@ func main() {
 	r.GET("/book", GetBookByID)
 	r.GET("/authors", GetAuthors)
 	r.GET("/book/availability", IsAvailable)
+	r.POST("/book/cancel/reservation", CancelBookReservation)
 	r.POST("/user", GetUserByID)
 	r.POST("/user/history", GetUserHistory)
 	r.POST("/history", GetHistory)
