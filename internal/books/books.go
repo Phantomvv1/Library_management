@@ -1031,7 +1031,7 @@ func IsAvailable(c *gin.Context) {
 	err = conn.QueryRow(context.Background(), "select quantity from books b where b.id = $1", id).Scan(&quantity)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Error there is book with this id in this library"})
+			c.JSON(http.StatusNotFound, gin.H{"error": "Error there is no book with this id in this library"})
 			return
 		}
 
