@@ -3,6 +3,7 @@ package reviews
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -115,6 +116,19 @@ func LeaveReview(c *gin.Context) { //to be tested
 	if err = CreateReviewsTable(conn); err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to create a table for reviews"})
+		return
+	}
+
+	hasBorrowedThatBook := false
+	err = conn.QueryRow(context.Background(), fmt.Sprint(`select hasborrowed from
+				(
+				select b.id, a.history, (b.title = ANY (a.history)) as hasBorrowed
+				from books b join authentication a on b.id = a.id
+				)
+				where id = $1`), review.BookID).Scan(&hasBorrowedThatBook)
+
+	if !hasBorrowedThatBook {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error you are unable to leave reviews on books that you haven't borrowed"})
 		return
 	}
 
