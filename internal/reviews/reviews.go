@@ -228,3 +228,102 @@ func DeleteReview(c *gin.Context) { // to be tested
 
 	c.JSON(http.StatusOK, nil)
 }
+
+func EditReview(c *gin.Context) { // to be tested
+	var information map[string]interface{}
+	json.NewDecoder(c.Request.Body).Decode(&information) // token && bookID && (comment || stars)
+
+	token, ok := information["token"].(string)
+	if !ok {
+		log.Println("Token was not provided correctl")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error token was not provided correctl"})
+		return
+	}
+
+	id, _, err := ValidateJWT(token)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
+		return
+	}
+
+	bookIDFl, ok := information["bookID"].(float64)
+	if !ok {
+		log.Println("Error incorrectly provided the id of the book")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided the id of the book"})
+		return
+	}
+
+	review := Review{}
+	review.BookID = int(bookIDFl)
+
+	problem := false
+	starsCheck, ok := information["stars"].(float64)
+	if !ok {
+		problem = true
+	} else {
+		review.Stars = float32(starsCheck)
+		if !review.validNumberOfStarts() {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Error invalid number of stars"})
+			return
+		}
+	}
+
+	newComment := true
+	review.Comment, ok = information["comment"].(string)
+	if !ok && problem {
+		log.Println(err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error no new information given in order to edit the old one"})
+		return
+	} else if !ok {
+		newComment = false
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	var stars float32
+	comment := ""
+	err = conn.QueryRow(context.Background(), "select comment, stars from reviews where user_id = $1 and book_id = $2", id, review.BookID).Scan(&comment, &stars)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Error you haven't left a review on this book, so you can't edit it"})
+			return
+		}
+
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while checking if you have left a review"})
+		return
+	}
+
+	if problem {
+		review.Stars = stars
+	} else if !newComment {
+		review.Comment = comment
+	} else {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error parsing the new comment or stars"})
+		return
+	}
+
+	_, err = conn.Exec(context.Background(), "update reviews set comment = $1 and stars = $2 where user_id = $3 and book_id = $4", review.Comment, review.Stars, id, review.BookID)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable update the review"})
+		return
+	}
+
+	c.JSON(http.StatusOK, nil)
+}
+
+func GetReviewsForBook(c *gin.Context) {
+
+}
+
+func GetReviewsOfUser(c *gin.Context) {
+
+}
