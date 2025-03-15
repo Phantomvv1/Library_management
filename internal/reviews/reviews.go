@@ -50,7 +50,8 @@ func (r Review) validNumberOfStarts() bool {
 }
 
 func CreateReviewsTable(conn *pgx.Conn) error {
-	_, err := conn.Exec(context.Background(), "create table if not exists reviews (id serial primary key, user_id int, book_id, stars numeric, comment text)")
+	_, err := conn.Exec(context.Background(), "create table if not exists reviews (id serial primary key, user_id int references authentication(id), book_id int references books(id)"+
+		" , stars numeric, comment text)")
 	if err != nil {
 		return err
 	}
@@ -58,7 +59,7 @@ func CreateReviewsTable(conn *pgx.Conn) error {
 	return nil
 }
 
-func LeaveReview(c *gin.Context) { //to be tested
+func LeaveReview(c *gin.Context) {
 	var information map[string]interface{}
 	json.NewDecoder(c.Request.Body).Decode(&information) // stars && comment && token && bookID
 
@@ -120,15 +121,46 @@ func LeaveReview(c *gin.Context) { //to be tested
 	}
 
 	hasBorrowedThatBook := false
-	err = conn.QueryRow(context.Background(), fmt.Sprint(`select hasborrowed from
+	err = conn.QueryRow(context.Background(), fmt.Sprintf(`select hasborrowed from
 				(
 				select b.id, a.history, (b.title = ANY (a.history)) as hasBorrowed
 				from books b join authentication a on b.id = a.id
 				)
 				where id = $1`), review.BookID).Scan(&hasBorrowedThatBook)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusForbidden, gin.H{"error": "You haven't borrowed this book, so you can't leave a review"})
+			return
+		}
+
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to check if the user has borrowed this book"})
+		return
+	}
 
 	if !hasBorrowedThatBook {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Error you are unable to leave reviews on books that you haven't borrowed"})
+		return
+	}
+
+	check := 0
+	ok = false
+	err = conn.QueryRow(context.Background(), "select id from reviews where user_id = $1 and book_id = $2", id, review.BookID).Scan(&check)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			ok = true
+		}
+
+		if !ok {
+			log.Println(err)
+			c.JSON(http.StatusForbidden, gin.H{"error": "Error a user can leave a review only once!"})
+			return
+		}
+	}
+
+	if check != 0 {
+		log.Println("Error a user can leave a review only once!")
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error a user can leave a review only once!"})
 		return
 	}
 
@@ -174,6 +206,12 @@ func DeleteReview(c *gin.Context) { // to be tested
 		return
 	}
 	defer conn.Close(context.Background())
+
+	if err = CreateReviewsTable(conn); err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to create a table for reviews"})
+		return
+	}
 
 	check := 0
 	err = conn.QueryRow(context.Background(), "delete from reviews where user_id = $1 and book_id = $2 returning id", id, bookID).Scan(&check)
