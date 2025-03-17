@@ -229,7 +229,7 @@ func DeleteReview(c *gin.Context) { // to be tested
 	c.JSON(http.StatusOK, nil)
 }
 
-func EditReview(c *gin.Context) { // to be tested
+func EditReview(c *gin.Context) {
 	var information map[string]interface{}
 	json.NewDecoder(c.Request.Body).Decode(&information) // token && bookID && (comment || stars)
 
@@ -310,7 +310,7 @@ func EditReview(c *gin.Context) { // to be tested
 		return
 	}
 
-	_, err = conn.Exec(context.Background(), "update reviews set comment = $1 and stars = $2 where user_id = $3 and book_id = $4", review.Comment, review.Stars, id, review.BookID)
+	_, err = conn.Exec(context.Background(), "update reviews set comment = $1, stars = $2 where user_id = $3 and book_id = $4", review.Comment, review.Stars, id, review.BookID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable update the review"})
@@ -320,8 +320,79 @@ func EditReview(c *gin.Context) { // to be tested
 	c.JSON(http.StatusOK, nil)
 }
 
-func GetReviewsForBook(c *gin.Context) {
+func GetReviewsForBook(c *gin.Context) { // to be tested
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
 
+	var information map[string]interface{}
+	json.NewDecoder(c.Request.Body).Decode(&information) // bookID || title
+
+	problem := false
+	bookID := 0
+	bookIDFl, ok := information["bookID"].(float64)
+	if !ok {
+		problem = true
+	} else {
+		bookID = int(bookIDFl)
+	}
+
+	title, ok := information["title"].(string)
+	if !ok && problem {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error not enough information provided in order to determine which book you want the reviews to"})
+		return
+	}
+
+	var rows pgx.Rows
+	if !problem {
+		rows, err = conn.Query(context.Background(), "select stars, comment from reviews r where r.book_id = $1", bookID)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get the reviews from the database"})
+			return
+		}
+	} else {
+		err = conn.QueryRow(context.Background(), "select id from books b where b.title = $1", title).Scan(&bookID)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get information about the book from the database"})
+			return
+		}
+
+		rows, err = conn.Query(context.Background(), "select stars, comment from reviews r where r.book_id = $1", bookID)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get the reviews from the database"})
+			return
+		}
+	}
+
+	var reviews []Review
+	for rows.Next() {
+		review := Review{}
+		err = rows.Scan(&review.Stars, &review.Comment)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the data"})
+			return
+		}
+
+		review.BookID = bookID
+		reviews = append(reviews, review)
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to work with the information correctly"})
+		return
+
+	}
+
+	c.JSON(http.StatusOK, gin.H{"reviews": reviews})
 }
 
 func GetReviewsOfUser(c *gin.Context) {
