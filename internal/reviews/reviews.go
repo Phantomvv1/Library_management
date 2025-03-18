@@ -120,13 +120,21 @@ func LeaveReview(c *gin.Context) {
 		return
 	}
 
+	title := ""
+	err = conn.QueryRow(context.Background(), "select title from books where id = $1", review.BookID).Scan(&title)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get the title of the book from the database"})
+		return
+	}
+
 	hasBorrowedThatBook := false
 	err = conn.QueryRow(context.Background(), fmt.Sprintf(`select hasborrowed from
 				(
-				select b.id, a.history, (b.title = ANY (a.history)) as hasBorrowed
+				select a.id, a.history, ($1 = ANY (a.history)) as hasBorrowed
 				from books b join authentication a on b.id = a.id
 				)
-				where id = $1`), review.BookID).Scan(&hasBorrowedThatBook)
+				where id = $2`), title, id).Scan(&hasBorrowedThatBook)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			c.JSON(http.StatusForbidden, gin.H{"error": "You haven't borrowed this book, so you can't leave a review"})
@@ -392,9 +400,78 @@ func GetReviewsForBook(c *gin.Context) { // to be tested
 
 	}
 
+	if reviews == nil {
+		c.JSON(http.StatusNotFound, gin.H{"message": "No reviews have been made on this book yet"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{"reviews": reviews})
 }
 
 func GetReviewsOfUser(c *gin.Context) {
+	var information map[string]interface{}
+	json.NewDecoder(c.Request.Body).Decode(&information) // token && userID
 
+	token, ok := information["token"].(string)
+	if !ok {
+		log.Println("Incorrectly provided token")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Incorrectly provided token"})
+		return
+	}
+
+	_, accountType, err := ValidateJWT(token)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
+		return
+	}
+
+	if accountType != "librarian" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error only librarians can view the comments of a certain user"})
+		return
+	}
+
+	userIDFl, ok := information["userID"].(float64)
+	if !ok {
+		log.Println("Incorrectly provided information about the id of the user")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided information about the id of the user"})
+		return
+	}
+	userID := int(userIDFl)
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	rows, err := conn.Query(context.Background(), "select stars, comment, book_id from reviews where user_id = $1", userID)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get information from the database"})
+		return
+	}
+
+	var reviews []Review
+	for rows.Next() {
+		review := Review{}
+		err = rows.Scan(&review.Stars, &review.Comment, &review.BookID)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the data"})
+			return
+		}
+
+		reviews = append(reviews, review)
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the data"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"reviews": reviews})
 }
