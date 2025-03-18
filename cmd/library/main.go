@@ -26,6 +26,7 @@ func main() {
 	r.PUT("/review", EditReview)
 	r.POST("/book/review", GetReviewsForBook)
 	r.POST("/review/user", GetReviewsOfUser)
+	r.POST("/book/rating", GetBookRating)
 	r.POST("/book/cancel/reservation", CancelBookReservation)
 	r.POST("/user", GetUserByID)
 	r.POST("/user/history", GetUserHistory)

@@ -475,3 +475,54 @@ func GetReviewsOfUser(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"reviews": reviews})
 }
+
+func GetBookRating(c *gin.Context) { // to be tested
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	var information map[string]int
+	json.NewDecoder(c.Request.Body).Decode(&information)
+
+	bookID, ok := information["bookID"]
+	if !ok {
+		log.Println("Error the id of the book is not specified")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error the id of the book is not specified"})
+		return
+	}
+
+	rows, err := conn.Query(context.Background(), "select stars from reviews where book_id = $1", bookID)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get information about the reviews on this book"})
+		return
+	}
+
+	count := 0
+	var sum float32
+	for rows.Next() {
+		var stars float32
+		err = rows.Scan(&stars)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get the rating of this book"})
+			return
+		}
+
+		sum += stars
+		count++
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the reviews"})
+		return
+	}
+
+	rating := sum / float32(count)
+	c.JSON(http.StatusOK, gin.H{"rating": rating})
+}
