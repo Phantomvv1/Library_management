@@ -575,3 +575,52 @@ func GetHighestRatedReviews(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"reviews": reviews})
 }
+
+func GetLowestRatedReviews(c *gin.Context) {
+	var information map[string]int
+	json.NewDecoder(c.Request.Body).Decode(&information)
+
+	bookID, ok := information["bookID"]
+	if !ok {
+		log.Println("Incorrectly provided id of the book")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided id of the book"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	rows, err := conn.Query(context.Background(), "select stars, comment from reviews r where r.stars <= 2 and r.book_id = $1", bookID)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get information from the database"})
+		return
+	}
+
+	var reviews []Review
+	for rows.Next() {
+		review := Review{}
+		err = rows.Scan(&review.Stars, &review.Comment)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the information"})
+			return
+		}
+
+		review.BookID = bookID
+		reviews = append(reviews, review)
+	}
+
+	if rows.Err() != nil {
+		log.Println(rows.Err())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the information from the database"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"reviews": reviews})
+}
