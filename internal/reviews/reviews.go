@@ -14,9 +14,17 @@ import (
 )
 
 type Review struct {
+	ID      int     `json:"id"`
 	Stars   float32 `json:"stars"`
 	Comment string  `json:"comment"`
 	BookID  int     `json:"bookID"`
+}
+
+type Vote struct {
+	ID       int    `json:"id"`
+	Vote     string `json:"vote"`
+	ReviewID int    `json:"reviewID"`
+	UserID   int    `json:"userID"`
 }
 
 func (r Review) validNumberOfStarts() bool {
@@ -49,9 +57,29 @@ func (r Review) validNumberOfStarts() bool {
 	}
 }
 
+func (v Vote) validVote() bool {
+	switch v.Vote {
+	case "up":
+		return true
+	case "down":
+		return true
+	default:
+		return false
+	}
+}
+
 func CreateReviewsTable(conn *pgx.Conn) error {
 	_, err := conn.Exec(context.Background(), "create table if not exists reviews (id serial primary key, user_id int references authentication(id), book_id int references books(id)"+
 		" , stars numeric, comment text)")
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func CreateVotesTable(conn *pgx.Conn) error {
+	_, err := conn.Exec(context.Background(), "create table if not exists votes (id serial primary key, vote text, review_id int references reviews(id), user_id int references authentication(id))")
 	if err != nil {
 		return err
 	}
@@ -182,7 +210,7 @@ func LeaveReview(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func DeleteReview(c *gin.Context) { // to be tested
+func DeleteReview(c *gin.Context) {
 	var information map[string]interface{}
 	json.NewDecoder(c.Request.Body).Decode(&information) // token && book_id
 
@@ -328,7 +356,7 @@ func EditReview(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func GetReviewsForBook(c *gin.Context) { // to be tested
+func GetReviewsForBook(c *gin.Context) {
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Println(err)
@@ -357,7 +385,7 @@ func GetReviewsForBook(c *gin.Context) { // to be tested
 
 	var rows pgx.Rows
 	if !problem {
-		rows, err = conn.Query(context.Background(), "select stars, comment from reviews r where r.book_id = $1", bookID)
+		rows, err = conn.Query(context.Background(), "select id, stars, comment from reviews r where r.book_id = $1", bookID)
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get the reviews from the database"})
@@ -371,7 +399,7 @@ func GetReviewsForBook(c *gin.Context) { // to be tested
 			return
 		}
 
-		rows, err = conn.Query(context.Background(), "select stars, comment from reviews r where r.book_id = $1", bookID)
+		rows, err = conn.Query(context.Background(), "select id, stars, comment from reviews r where r.book_id = $1", bookID)
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get the reviews from the database"})
@@ -382,7 +410,7 @@ func GetReviewsForBook(c *gin.Context) { // to be tested
 	var reviews []Review
 	for rows.Next() {
 		review := Review{}
-		err = rows.Scan(&review.Stars, &review.Comment)
+		err = rows.Scan(&review.ID, &review.Stars, &review.Comment)
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the data"})
@@ -447,7 +475,7 @@ func GetReviewsOfUser(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	rows, err := conn.Query(context.Background(), "select stars, comment, book_id from reviews where user_id = $1", userID)
+	rows, err := conn.Query(context.Background(), "select id, stars, comment, book_id from reviews where user_id = $1", userID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get information from the database"})
@@ -457,7 +485,7 @@ func GetReviewsOfUser(c *gin.Context) {
 	var reviews []Review
 	for rows.Next() {
 		review := Review{}
-		err = rows.Scan(&review.Stars, &review.Comment, &review.BookID)
+		err = rows.Scan(&review.ID, &review.Stars, &review.Comment, &review.BookID)
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the data"})
@@ -546,7 +574,7 @@ func GetHighestRatedReviews(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	rows, err := conn.Query(context.Background(), "select stars, comment from reviews r where r.stars >= 4 and r.book_id = $1", bookID)
+	rows, err := conn.Query(context.Background(), "select id, stars, comment from reviews r where r.stars >= 4 and r.book_id = $1", bookID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get information from the database"})
@@ -556,7 +584,7 @@ func GetHighestRatedReviews(c *gin.Context) {
 	var reviews []Review
 	for rows.Next() {
 		review := Review{}
-		err = rows.Scan(&review.Stars, &review.Comment)
+		err = rows.Scan(&review.ID, &review.Stars, &review.Comment)
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the information"})
@@ -595,7 +623,7 @@ func GetLowestRatedReviews(c *gin.Context) {
 	}
 	defer conn.Close(context.Background())
 
-	rows, err := conn.Query(context.Background(), "select stars, comment from reviews r where r.stars <= 2 and r.book_id = $1", bookID)
+	rows, err := conn.Query(context.Background(), "select id, stars, comment from reviews r where r.stars <= 2 and r.book_id = $1", bookID)
 	if err != nil {
 		log.Println(err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get information from the database"})
@@ -605,7 +633,7 @@ func GetLowestRatedReviews(c *gin.Context) {
 	var reviews []Review
 	for rows.Next() {
 		review := Review{}
-		err = rows.Scan(&review.Stars, &review.Comment)
+		err = rows.Scan(&review.ID, &review.Stars, &review.Comment)
 		if err != nil {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the information"})
@@ -623,4 +651,73 @@ func GetLowestRatedReviews(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"reviews": reviews})
+}
+
+func VoteForReview(c *gin.Context) { // TODO: add a check if the user has already voted for this review
+	var information map[string]interface{}
+	json.NewDecoder(c.Request.Body).Decode(&information) // token && vote && reviewID
+
+	token, ok := information["token"].(string)
+	if !ok {
+		log.Println("Incorrectly provided token")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided token"})
+		return
+	}
+
+	id, _, err := ValidateJWT(token)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
+		return
+	}
+
+	vote := Vote{}
+	vote.UserID = id
+
+	vote.Vote, ok = information["vote"].(string)
+	if !ok {
+		log.Println("Incorrectly provided vote")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided vote"})
+		return
+	}
+
+	if !vote.validVote() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error invalid vote"})
+		return
+	}
+
+	reviewID, ok := information["reviewID"].(float64)
+	if !ok {
+		log.Println("Incorrectly provided the id of the review which you are voting about")
+		c.JSON(http.StatusBadRequest, gin.H{"errror": "Error incorrectly provided the id which you are voting about"})
+		return
+	}
+	vote.ReviewID = int(reviewID)
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	if err = CreateVotesTable(conn); err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to create a table for the votes"})
+		return
+	}
+
+	_, err = conn.Exec(context.Background(), "insert into votes (vote, user_id, review_id) values ($1, $2, $3)", vote.Vote, vote.UserID, vote.ReviewID)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to put the information about your vote in the database"})
+		return
+	}
+
+	c.JSON(http.StatusOK, nil)
+}
+
+func GetVotesForReview(c *gin.Context) {
+
 }
