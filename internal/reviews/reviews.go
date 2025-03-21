@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,12 @@ type Vote struct {
 	Vote     string `json:"vote"`
 	ReviewID int    `json:"reviewID"`
 	UserID   int    `json:"userID"`
+}
+
+type ThVote struct {
+	result   int
+	err      error
+	voteType string
 }
 
 func (r Review) validNumberOfStarts() bool {
@@ -738,10 +745,88 @@ func VoteForReview(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-// func getUpVotes()   {}
-//
-// func getDownVotes() {}
+func getUpVotes(conn *pgx.Conn, result chan<- ThVote, reviewID int, mu *sync.Mutex) {
+	res := ThVote{}
+	res.voteType = "up"
+	count := 0
+
+	mu.Lock()
+	err := conn.QueryRow(context.Background(), "select count(*) from votes v where v.vote = $1 and v.review_id = $2", res.voteType, reviewID).Scan(&count)
+	mu.Unlock()
+
+	if err != nil {
+		res.result = 0
+		res.err = err
+
+		result <- res
+		return
+	}
+
+	res.result = count
+	res.err = nil
+	result <- res
+}
+
+func getDownVotes(conn *pgx.Conn, result chan<- ThVote, reviewID int, mu *sync.Mutex) {
+	res := ThVote{}
+	res.voteType = "down"
+	count := 0
+
+	mu.Lock()
+	err := conn.QueryRow(context.Background(), "select count(*) from votes v where v.vote = $1 and v.review_id = $2", res.voteType, reviewID).Scan(&count)
+	mu.Unlock()
+
+	if err != nil {
+		res.result = 0
+		res.err = err
+
+		result <- res
+		return
+	}
+
+	res.result = count
+	res.err = nil
+	result <- res
+}
 
 func GetVotesForReview(c *gin.Context) {
+	result := make(chan ThVote)
 
+	var info map[string]int
+	json.NewDecoder(c.Request.Body).Decode(&info)
+
+	reviewID, ok := info["reviewID"]
+	if !ok {
+		log.Println("Incorrectly provided the id of the review")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided the id of the review"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	mu := &sync.Mutex{}
+	go getUpVotes(conn, result, reviewID, mu)
+	go getDownVotes(conn, result, reviewID, mu)
+
+	information := make(map[string]int)
+	for range 2 {
+		select {
+		case r := <-result:
+			if r.err != nil {
+				log.Println(r.err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get the votes for this review"})
+				return
+			}
+
+			information[r.voteType] = r.result
+		}
+	}
+
+	c.JSON(http.StatusOK, information)
 }
