@@ -653,7 +653,7 @@ func GetLowestRatedReviews(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"reviews": reviews})
 }
 
-func VoteForReview(c *gin.Context) { // TODO: add a check if the user has already voted for this review
+func VoteForReview(c *gin.Context) {
 	var information map[string]interface{}
 	json.NewDecoder(c.Request.Body).Decode(&information) // token && vote && reviewID
 
@@ -708,6 +708,26 @@ func VoteForReview(c *gin.Context) { // TODO: add a check if the user has alread
 		return
 	}
 
+	idCheck := 0
+	err = conn.QueryRow(context.Background(), "select id from votes where review_id = $1 and user_id = $2", vote.ReviewID, id).Scan(&idCheck)
+	if err != nil {
+		ok = false
+		if err == pgx.ErrNoRows {
+			ok = true
+		}
+
+		if !ok {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while trying to check if the user has already voted for this review"})
+			return
+		}
+	}
+
+	if idCheck != 0 {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error you can't vote multiple times for the same review"})
+		return
+	}
+
 	_, err = conn.Exec(context.Background(), "insert into votes (vote, user_id, review_id) values ($1, $2, $3)", vote.Vote, vote.UserID, vote.ReviewID)
 	if err != nil {
 		log.Println(err)
@@ -717,6 +737,10 @@ func VoteForReview(c *gin.Context) { // TODO: add a check if the user has alread
 
 	c.JSON(http.StatusOK, nil)
 }
+
+// func getUpVotes()   {}
+//
+// func getDownVotes() {}
 
 func GetVotesForReview(c *gin.Context) {
 
