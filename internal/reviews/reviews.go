@@ -718,12 +718,7 @@ func VoteForReview(c *gin.Context) {
 	idCheck := 0
 	err = conn.QueryRow(context.Background(), "select id from votes where review_id = $1 and user_id = $2", vote.ReviewID, id).Scan(&idCheck)
 	if err != nil {
-		ok = false
-		if err == pgx.ErrNoRows {
-			ok = true
-		}
-
-		if !ok {
+		if err != pgx.ErrNoRows {
 			log.Println(err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while trying to check if the user has already voted for this review"})
 			return
@@ -807,4 +802,69 @@ func GetVotesForReview(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, information)
+}
+
+type thReview struct {
+	count int
+	err   error
+}
+
+func getReviews(conn *pgx.Conn, result chan<- thReview, stars float32, mu *sync.Mutex, bookID int) {
+	res := thReview{}
+
+	mu.Lock()
+	err := conn.QueryRow(context.Background(), "select count(*) from reviews r where r.stars = $1 and r.book_id = $2", stars, bookID).Scan(&res.count)
+	mu.Unlock()
+
+	if err != nil {
+		res.err = err
+		result <- res
+		return
+	}
+
+	res.err = nil
+	result <- res
+}
+
+func RatingDetails(c *gin.Context) {
+	result := make(chan thReview)
+	mu := &sync.Mutex{}
+
+	var information map[string]int
+	json.NewDecoder(c.Request.Body).Decode(&information)
+
+	bookID, ok := information["bookID"]
+	if !ok {
+		log.Println("Incorrectly provided bookID")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided bookID"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	for i := 0.0; i <= 5.0; i += 0.5 {
+		go getReviews(conn, result, float32(i), mu, bookID)
+	}
+
+	info := make(map[string]int)
+	for i := 0.0; i <= 5.0; i += 0.5 {
+		select {
+		case res := <-result:
+			if res.err != nil {
+				log.Println(err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "Error collecting the reviews"})
+				return
+			}
+
+			info[fmt.Sprintf("%v", i)] = res.count
+		}
+	}
+
+	c.JSON(http.StatusOK, info)
 }
