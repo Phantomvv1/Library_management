@@ -745,31 +745,9 @@ func VoteForReview(c *gin.Context) {
 	c.JSON(http.StatusOK, nil)
 }
 
-func getUpVotes(conn *pgx.Conn, result chan<- ThVote, reviewID int, mu *sync.Mutex) {
+func getVotes(conn *pgx.Conn, result chan<- ThVote, reviewID int, mu *sync.Mutex, voteType string) {
 	res := ThVote{}
-	res.voteType = "up"
-	count := 0
-
-	mu.Lock()
-	err := conn.QueryRow(context.Background(), "select count(*) from votes v where v.vote = $1 and v.review_id = $2", res.voteType, reviewID).Scan(&count)
-	mu.Unlock()
-
-	if err != nil {
-		res.result = 0
-		res.err = err
-
-		result <- res
-		return
-	}
-
-	res.result = count
-	res.err = nil
-	result <- res
-}
-
-func getDownVotes(conn *pgx.Conn, result chan<- ThVote, reviewID int, mu *sync.Mutex) {
-	res := ThVote{}
-	res.voteType = "down"
+	res.voteType = voteType
 	count := 0
 
 	mu.Lock()
@@ -811,8 +789,8 @@ func GetVotesForReview(c *gin.Context) {
 	defer conn.Close(context.Background())
 
 	mu := &sync.Mutex{}
-	go getUpVotes(conn, result, reviewID, mu)
-	go getDownVotes(conn, result, reviewID, mu)
+	go getVotes(conn, result, reviewID, mu, "up")
+	go getVotes(conn, result, reviewID, mu, "down")
 
 	information := make(map[string]int)
 	for range 2 {
