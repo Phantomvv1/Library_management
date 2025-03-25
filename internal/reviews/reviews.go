@@ -805,12 +805,14 @@ func GetVotesForReview(c *gin.Context) {
 }
 
 type thReview struct {
-	count int
-	err   error
+	count   int
+	err     error
+	toStars float32
 }
 
 func getReviews(conn *pgx.Conn, result chan<- thReview, stars float32, mu *sync.Mutex, bookID int) {
 	res := thReview{}
+	res.toStars = stars
 
 	mu.Lock()
 	err := conn.QueryRow(context.Background(), "select count(*) from reviews r where r.stars = $1 and r.book_id = $2", stars, bookID).Scan(&res.count)
@@ -862,7 +864,7 @@ func RatingDetails(c *gin.Context) {
 				return
 			}
 
-			info[fmt.Sprintf("%v", i)] = res.count
+			info[fmt.Sprintf("%v", res.toStars)] = res.count
 		}
 	}
 
