@@ -187,14 +187,9 @@ func LeaveReview(c *gin.Context) {
 	}
 
 	check := 0
-	ok = false
 	err = conn.QueryRow(context.Background(), "select id from reviews where user_id = $1 and book_id = $2", id, review.BookID).Scan(&check)
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			ok = true
-		}
-
-		if !ok {
+		if err != pgx.ErrNoRows {
 			log.Println(err)
 			c.JSON(http.StatusForbidden, gin.H{"error": "Error a user can leave a review only once!"})
 			return
