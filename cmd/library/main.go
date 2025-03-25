@@ -18,6 +18,7 @@ func main() {
 	r.GET("/books", GetBooks)
 	r.GET("/librarians", GetLibrarians)
 	r.GET("/events", GetEvents)
+	r.GET("/event/upcoming", GetUpcomingEvents)
 	r.GET("/book", GetBookByID)
 	r.GET("/authors", GetAuthors)
 	r.GET("/book/availability", IsAvailable)

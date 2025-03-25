@@ -416,3 +416,35 @@ func GetUserHistory(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"user history": profiles})
 }
+
+func GetUpcomingEvents(c *gin.Context) {
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	rows, err := conn.Query(context.Background(), "select id, name, description, start from events e where e.start > current_timestamp")
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get the information from the database"})
+		return
+	}
+
+	var events []Event
+	for rows.Next() {
+		event := Event{}
+		err = rows.Scan(&event.ID, &event.Name, &event.Description, &event.Start)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the information from the database"})
+			return
+		}
+
+		events = append(events, event)
+	}
+
+	c.JSON(http.StatusOK, gin.H{"events": events})
+}
