@@ -6,6 +6,7 @@ import (
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
 	. "github.com/Phantomvv1/Library_management/internal/books"
 	. "github.com/Phantomvv1/Library_management/internal/librarians"
+	. "github.com/Phantomvv1/Library_management/internal/reviews"
 	. "github.com/Phantomvv1/Library_management/internal/users"
 	"github.com/gin-gonic/gin"
 )
@@ -20,6 +21,17 @@ func main() {
 	r.GET("/book", GetBookByID)
 	r.GET("/authors", GetAuthors)
 	r.GET("/book/availability", IsAvailable)
+	r.POST("/review", LeaveReview)
+	r.DELETE("/review", DeleteReview)
+	r.PUT("/review", EditReview)
+	r.POST("/book/review", GetReviewsForBook)
+	r.POST("/review/user", GetReviewsOfUser)
+	r.POST("/book/rating", GetBookRating)
+	r.POST("/book/review/high", GetHighestRatedReviews)
+	r.POST("/book/review/low", GetLowestRatedReviews)
+	r.POST("/review/vote", VoteForReview)
+	r.POST("/review/votes", GetVotesForReview)
+	r.POST("/book/rating/details", RatingDetails)
 	r.POST("/book/cancel/reservation", CancelBookReservation)
 	r.POST("/user", GetUserByID)
 	r.POST("/user/history", GetUserHistory)
