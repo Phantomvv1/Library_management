@@ -33,6 +33,7 @@ func main() {
 	r.POST("/review/vote", VoteForReview)
 	r.POST("/review/votes", GetVotesForReview)
 	r.POST("/book/rating/details", RatingDetails)
+	r.POST("/book/rating/details/sql", RatingDetailsSQL)
 	r.POST("/book/cancel/reservation", CancelBookReservation)
 	r.POST("/user", GetUserByID)
 	r.POST("/user/history", GetUserHistory)

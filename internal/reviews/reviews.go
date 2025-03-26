@@ -828,7 +828,7 @@ func RatingDetails(c *gin.Context) {
 	mu := &sync.Mutex{}
 
 	var information map[string]int
-	json.NewDecoder(c.Request.Body).Decode(&information)
+	json.NewDecoder(c.Request.Body).Decode(&information) // bookID
 
 	bookID, ok := information["bookID"]
 	if !ok {
@@ -864,4 +864,72 @@ func RatingDetails(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, info)
+}
+
+func RatingDetailsSQL(c *gin.Context) {
+	var information map[string]int
+	json.NewDecoder(c.Request.Body).Decode(&information) // bookID
+
+	bookID, ok := information["bookID"]
+	if !ok {
+		log.Println("Incorrectly provided bookID")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided bookID"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	rows, err := conn.Query(context.Background(), fmt.Sprintf(`select * from 
+(
+		select count(*) from reviews r where r.stars = 0.0 and r.book_id = $1
+		union all
+		select count(*) from reviews r where r.stars = 0.5 and r.book_id = $1
+		union all
+		select count(*) from reviews r where r.stars = 1 and r.book_id = $1
+		union all
+		select count(*) from reviews r where r.stars = 1.5 and r.book_id = $1
+		union all
+		select count(*) from reviews r where r.stars = 2 and r.book_id = $1
+		union all
+		select count(*) from reviews r where r.stars = 2.5 and r.book_id = $1
+		union all
+		select count(*) from reviews r where r.stars = 3 and r.book_id = $1
+		union all
+		select count(*) from reviews r where r.stars = 3.5 and r.book_id = $1
+		union all
+		select count(*) from reviews r where r.stars = 4 and r.book_id = $1
+		union all
+		select count(*) from reviews r where r.stars = 4.5 and r.book_id = $1
+		union all
+		select count(*) from reviews r where r.stars = 5 and r.book_id = $1
+)`), bookID)
+
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to get information from the database"})
+		return
+	}
+
+	result := make(map[string]int)
+	toStars := 0.0
+	for rows.Next() {
+		count := 0
+		err = rows.Scan(&count)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to work with the information from the database"})
+			return
+		}
+
+		result[fmt.Sprintf("%v", toStars)] = count
+		toStars += 0.5
+	}
+
+	c.JSON(http.StatusOK, result)
 }
