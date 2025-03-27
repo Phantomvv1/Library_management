@@ -933,3 +933,59 @@ func RatingDetailsSQL(c *gin.Context) {
 
 	c.JSON(http.StatusOK, result)
 }
+
+func GetVotesForReviewSQL(c *gin.Context) {
+	var information map[string]int
+	json.NewDecoder(c.Request.Body).Decode(&information)
+
+	reviewID, ok := information["reviewID"]
+	if !ok {
+		log.Println("Invalid review id")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error invalid review id"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	rows, err := conn.Query(context.Background(), fmt.Sprintf(`select * from 
+		(
+			select count(*) from votes v where v.review_id = $1 and v.vote = 'up'
+			union all
+			select count(*) from votes v where v.review_id = $1 and v.vote = 'down'
+		)
+		`), reviewID)
+
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error getting the information from the database"})
+		return
+	}
+
+	result := make(map[string]int)
+	voteType := 0
+	for rows.Next() {
+		count := 0
+		err = rows.Scan(&count)
+		if err != nil {
+			log.Println(err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Error working with the data from the database"})
+			return
+		}
+
+		if voteType == 0 {
+			result["up"] = count
+		} else {
+			result["down"] = count
+		}
+
+		voteType++
+	}
+
+	c.JSON(http.StatusOK, result)
+}
