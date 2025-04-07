@@ -305,6 +305,7 @@ func GetInvited(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "No people have been invited to this event"})
 		return
 	}
+
 	c.JSON(http.StatusOK, gin.H{"people invited": invited})
 }
 

@@ -16,7 +16,7 @@ Users can view their borrowing history
 
 Users can reserve books to borrow when they are returned and available
 
-Users can search and view events, register for them or cancel their registration (eventa are e.g. book reading club meeting on Monday, etc.)
+Users can search and view events, register for them or cancel their registration (events are e.g. book reading club meeting on Monday, etc.)
 
 Librarians can create events and invite users to these events
 
@@ -25,5 +25,3 @@ Librarians can manage the inventory of books (add new ones, update quantities, r
 Librarians can view the list of books and past history of each user
 
 Librarians can view the list of books overdue
-
-Librarians can add new books by scanning their barcode with their phone or other hardware
