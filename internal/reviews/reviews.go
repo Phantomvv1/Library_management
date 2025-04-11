@@ -76,7 +76,7 @@ func (v Vote) validVote() bool {
 }
 
 func CreateReviewsTable(conn *pgx.Conn) error {
-	_, err := conn.Exec(context.Background(), "create table if not exists reviews (id serial primary key, user_id int references authentication(id), book_id int references books(id)"+
+	_, err := conn.Exec(context.Background(), "create table if not exists reviews (id serial primary key, user_id int references authentication(id) on delete cascade, book_id int references books(id)"+
 		" , stars numeric, comment text)")
 	if err != nil {
 		return err

@@ -243,3 +243,69 @@ func GetCurrentProfile(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"profile information": UserProfile})
 }
+
+func DeleteAccount(c *gin.Context) {
+	var information map[string]interface{}
+	json.NewDecoder(c.Request.Body).Decode(&information) // token && (id || email)
+
+	token, ok := information["token"].(string)
+	if !ok {
+		log.Println("Incorrectly provided token")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided token"})
+		return
+	}
+
+	userID, accountType, err := ValidateJWT(token)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
+		return
+	}
+
+	useID := true
+	idFl, ok := information["id"].(float64)
+	if !ok {
+		idFl = 0
+		useID = false
+	}
+	id := int(idFl)
+
+	if accountType != "librarian" && userID != id {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error you can't delete this account"})
+		return
+	}
+
+	email, ok := information["email"].(string)
+	if !ok && !useID {
+		log.Println("Incorrectly provided information about the user")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error unable to delete an account with the given information"})
+		return
+	}
+
+	if id != 0 && email != "" {
+		email = ""
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	check := 0
+	err = conn.QueryRow(context.Background(), "delete from authentication where id = $1 or email = $2 returning id", id, email).Scan(&check)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Error there is no user with this id or email"})
+			return
+		}
+
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error unable to delete information from the database"})
+		return
+	}
+
+	c.JSON(http.StatusOK, nil)
+}

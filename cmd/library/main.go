@@ -46,6 +46,7 @@ func main() {
 	r.POST("/login", LogIn)
 	r.POST("/searchbook", SearchForBook)
 	r.POST("/edit", EditProfile)
+	r.DELETE("/user", DeleteAccount)
 	r.POST("/book/borrow", BorrowBook)
 	r.POST("/book/return", ReturnBook)
 	r.POST("/book/reserve", ReserveBook)
