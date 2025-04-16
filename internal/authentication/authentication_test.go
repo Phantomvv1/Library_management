@@ -47,7 +47,7 @@ func TestLogIn(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	jsonBody := []byte(`{"email": "random_email@gmail.com", "password": "password"}`)
+	jsonBody := []byte(`{"email": "kris@kris.com", "password": "passowrd"}`)
 	reader := bytes.NewReader(jsonBody)
 
 	req, err := http.NewRequest(http.MethodPost, "http://localhost:42069/login", reader)

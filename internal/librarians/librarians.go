@@ -264,7 +264,7 @@ func GetInvited(c *gin.Context) {
 
 	var information map[string]interface{}
 	var event Event
-	json.NewDecoder(c.Request.Body).Decode(&information) // name && id && token
+	json.NewDecoder(c.Request.Body).Decode(&information) // id && token
 
 	tokenString, ok := information["token"].(string)
 	if !ok {
@@ -286,8 +286,8 @@ func GetInvited(c *gin.Context) {
 
 	id, ok := information["id"].(float64)
 	if !ok {
-		log.Println("Name is not of the correct type")
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Error name is not of the correct type"})
+		log.Println("ID is not of the correct type")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error id is not of the correct type"})
 		return
 	}
 	event.ID = int(id)
