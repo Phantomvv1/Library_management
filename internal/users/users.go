@@ -71,7 +71,7 @@ func GetUsers(c *gin.Context) {
 
 func EditProfile(c *gin.Context) {
 	information := make(map[string]string)
-	json.NewDecoder(c.Request.Body).Decode(&information) //name, email
+	json.NewDecoder(c.Request.Body).Decode(&information) // (name || email) && token
 
 	id, _, err := ValidateJWT(information["token"])
 	if err != nil {
@@ -97,19 +97,19 @@ func EditProfile(c *gin.Context) {
 	}
 
 	createNewToken := false
-	if name != information["name"] && information["name"] != "" {
-		name = information["name"]
+	useName := true
+	newName, ok := information["name"]
+	if !ok {
+		useName = false
 	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Error invalid new name"})
-		return
+		name = newName
 	}
 
-	if email != information["email"] && information["email"] != "" {
-		email = information["email"]
-		createNewToken = true
-	} else {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Error invalid new email"})
-		return
+	newEmail, ok := information["email"]
+	if !ok && !useName {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error no new information provided"})
+	} else if newEmail != "" {
+		email = newEmail
 	}
 
 	_, err = conn.Exec(context.Background(), "update authentication set name = $1, email = $2 where id = $3", name, email, id)
