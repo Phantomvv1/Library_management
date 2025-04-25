@@ -86,7 +86,7 @@ func CreateReviewsTable(conn *pgx.Conn) error {
 }
 
 func CreateVotesTable(conn *pgx.Conn) error {
-	_, err := conn.Exec(context.Background(), "create table if not exists votes (id serial primary key, vote text, review_id int references reviews(id), user_id int references authentication(id))")
+	_, err := conn.Exec(context.Background(), "create table if not exists votes (id serial primary key, vote text, review_id int references reviews(id) on delete cascade, user_id int references authentication(id))")
 	if err != nil {
 		return err
 	}
@@ -229,13 +229,13 @@ func DeleteReview(c *gin.Context) {
 		return
 	}
 
-	bookIDString, ok := information["bookID"].(float64)
+	bookIDFl, ok := information["bookID"].(float64)
 	if !ok {
 		log.Println("Incorrectly provided the id to which you have left a review")
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided the id to which you have left a review"})
 		return
 	}
-	bookID := int(bookIDString)
+	bookID := int(bookIDFl)
 
 	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {

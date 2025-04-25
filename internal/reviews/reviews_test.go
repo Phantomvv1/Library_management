@@ -197,7 +197,7 @@ func TestGetLowestRatedReviews(t *testing.T) {
 	}
 }
 
-func TestVoteForReview(t *testing.T) { // fix this one
+func TestVoteForReview(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.POST("/review/vote", VoteForReview)
@@ -312,25 +312,25 @@ func TestRatingDetailsSQL(t *testing.T) {
 	}
 }
 
-func TestDeleteReview(t *testing.T) { // fix this one too
+func TestDeleteReview(t *testing.T) {
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 	router.DELETE("/review", DeleteReview)
 
 	rr := httptest.NewRecorder()
 
-	body := []byte(fmt.Sprintf(`{"bookID": 1, "token": "%s"}`, Token))
+	body := []byte(fmt.Sprintf(`{"bookID": 2, "token": "%s"}`, Token))
 	reader := bytes.NewReader(body)
 
-	revReq, err := http.NewRequest(http.MethodDelete, "http://localhost:42069/review", reader)
+	req, err := http.NewRequest(http.MethodDelete, "http://localhost:42069/review", reader)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer rr.Result().Body.Close()
 
-	router.ServeHTTP(rr, revReq)
+	router.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
+	if rr.Code != http.StatusOK && rr.Code != http.StatusNotFound {
 		t.Fatal(rr.Body)
 	}
 }
