@@ -203,7 +203,7 @@ func GetBooks(c *gin.Context) {
 func AddBook(c *gin.Context) {
 	var information map[string]interface{}
 	var book Book
-	json.NewDecoder(c.Request.Body).Decode(&information) //isbn, title, author, year, quantity
+	json.NewDecoder(c.Request.Body).Decode(&information) //isbn, title, author, year, quantity, token
 
 	tokenString, ok := information["token"].(string)
 	if !ok {
