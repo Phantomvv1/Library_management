@@ -53,6 +53,7 @@ func main() {
 	r.POST("/event", CreateEvent)
 	r.POST("/event/invite", InviteToEvent)
 	r.POST("/book/quantity", UpdateBookQuantity)
+	r.POST("/book/update/id", UpdateBookID)
 	r.POST("/book/remove", RemoveBook)
 	r.POST("/book/overdue", GetBooksOverdue)
 

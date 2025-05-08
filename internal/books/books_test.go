@@ -78,7 +78,7 @@ func TestGetBooks(t *testing.T) {
 
 	router.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK && rr.Code != http.StatusForbidden {
+	if rr.Code != http.StatusOK {
 		t.Fatal(rr.Body)
 	}
 }
@@ -101,10 +101,9 @@ func TestSearchForBook(t *testing.T) {
 
 	router.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK && rr.Code != http.StatusForbidden {
+	if rr.Code != http.StatusOK {
 		t.Fatal(rr.Body)
 	}
-
 }
 
 func TestBorrowBook(t *testing.T) {
@@ -114,7 +113,7 @@ func TestBorrowBook(t *testing.T) {
 
 	rr := httptest.NewRecorder()
 
-	body := []byte(fmt.Sprintf(`{"name": "Some title", "returnDate": "2025-07-01", "token": "%s"}`, Token))
+	body := []byte(fmt.Sprintf(`{"title": "Some title", "returnDate": "2025-07-01", "token": "%s"}`, Token))
 	reader := bytes.NewReader(body)
 
 	req, err := http.NewRequest(http.MethodPost, "http://localhost:42069/book/borrow", reader)
@@ -125,7 +124,145 @@ func TestBorrowBook(t *testing.T) {
 
 	router.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusOK && rr.Code != http.StatusForbidden {
+	if rr.Code != http.StatusOK {
+		t.Fatal(rr.Body)
+	}
+}
+
+func TestReturnBook(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.Default()
+	router.POST("/book/return", ReturnBook)
+
+	rr := httptest.NewRecorder()
+
+	body := []byte(fmt.Sprintf(`{"title": "Some title", "token": "%s"}`, Token))
+	reader := bytes.NewReader(body)
+
+	req, err := http.NewRequest(http.MethodPost, "http://localhost:42069/book/return", reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rr.Result().Body.Close()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatal(rr.Body)
+	}
+}
+
+func TestGetHistory(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.Default()
+	router.POST("/history", GetHistory)
+
+	rr := httptest.NewRecorder()
+
+	body := []byte(fmt.Sprintf(`{"token": "%s"}`, Token))
+	reader := bytes.NewReader(body)
+
+	req, err := http.NewRequest(http.MethodPost, "http://localhost:42069/history", reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rr.Result().Body.Close()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatal(rr.Body)
+	}
+}
+
+func TestUpdateBookID(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.Default()
+	router.POST("/book/update/id", UpdateBookQuantity)
+
+	rr := httptest.NewRecorder()
+
+	body := []byte(fmt.Sprintf(`{"id": 8, "title": "Some title", "token": "%s"}`, Token))
+	reader := bytes.NewReader(body)
+
+	req, err := http.NewRequest(http.MethodPost, "http://localhost:42069/book/update/id", reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rr.Result().Body.Close()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatal(rr.Body)
+	}
+}
+
+func TestUpdateBookQuantity(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.Default()
+	router.POST("/book/quantity", UpdateBookQuantity)
+
+	rr := httptest.NewRecorder()
+
+	body := []byte(fmt.Sprintf(`{"id": 8, "quantity": 0, "token": "%s"}`, Token))
+	reader := bytes.NewReader(body)
+
+	req, err := http.NewRequest(http.MethodPost, "http://localhost:42069/book/quantity", reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rr.Result().Body.Close()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatal(rr.Body)
+	}
+}
+
+func TestReserveBook(t *testing.T) { // TODO: Make a way to remove the reservation
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.Default()
+	router.POST("/book/reserve", ReserveBook)
+
+	rr := httptest.NewRecorder()
+
+	body := []byte(fmt.Sprintf(`{"title": "Some title", "token": "%s"}`, Token))
+	reader := bytes.NewReader(body)
+
+	req, err := http.NewRequest(http.MethodPost, "http://localhost:42069/book/reserve", reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rr.Result().Body.Close()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatal(rr.Body)
+	}
+}
+
+func TestRemoveBook(t *testing.T) {
+	gin.SetMode(gin.ReleaseMode)
+	router := gin.Default()
+	router.POST("/book/remove", RemoveBook)
+
+	rr := httptest.NewRecorder()
+
+	body := []byte(fmt.Sprintf(`{"id": 8, "token": "%s"}`, Token))
+	reader := bytes.NewReader(body)
+
+	req, err := http.NewRequest(http.MethodPost, "http://localhost:42069/book/remove", reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rr.Result().Body.Close()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
 		t.Fatal(rr.Body)
 	}
 }

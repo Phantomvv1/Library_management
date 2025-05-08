@@ -1142,3 +1142,59 @@ func CancelBookReservation(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{"message": "The book reservation was canceled successfully"})
 }
+
+func UpdateBookID(c *gin.Context) {
+	var information map[string]interface{}
+	json.NewDecoder(c.Request.Body).Decode(&information) // token && id (new) && title
+
+	token, ok := information["token"].(string)
+	if !ok {
+		log.Println("Incorrectly provided token")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided token"})
+		return
+	}
+
+	_, accountType, err := ValidateJWT(token)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Error invalid token"})
+		return
+	}
+
+	if accountType != "librarian" {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Error only librarians can update books"})
+		return
+	}
+
+	idFL, ok := information["id"].(float64)
+	if !ok {
+		log.Println("Incorrectly provided id")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided id"})
+		return
+	}
+	id := int(idFL)
+
+	title, ok := information["title"].(string)
+	if !ok {
+		log.Println("Incorrectly provided title")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Error incorrectly provided title"})
+		return
+	}
+
+	conn, err := pgx.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error couldn't connect to the database"})
+		return
+	}
+	defer conn.Close(context.Background())
+
+	_, err = conn.Exec(context.Background(), "update books set id = $1 where title = $2", id, title)
+	if err != nil {
+		log.Println(err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error couldn't update the id of the book"})
+		return
+	}
+
+	c.JSON(http.StatusOK, nil)
+}
