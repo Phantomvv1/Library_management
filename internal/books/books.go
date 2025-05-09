@@ -798,6 +798,7 @@ func GetBooksOverdue(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Error while checking if there are books that are overdue"})
 		return
 	}
+
 	if count == 0 {
 		c.JSON(http.StatusOK, gin.H{"message": "There aren't any books that are overdue"})
 		return
@@ -840,7 +841,7 @@ func GetBooksOverdue(c *gin.Context) {
 		query = query + fmt.Sprintf("$%d", i+1)
 		args = append(args, userID)
 	}
-	query += ");"
+	query += ")"
 
 	rows, err = conn.Query(context.Background(), query, args...)
 	if err != nil {
@@ -1043,10 +1044,9 @@ func IsAvailable(c *gin.Context) {
 	if quantity > 0 {
 		c.JSON(http.StatusOK, gin.H{"available": true})
 		return
-	} else {
-		c.JSON(http.StatusOK, gin.H{"available": false})
-		return
 	}
+
+	c.JSON(http.StatusOK, gin.H{"available": false})
 }
 
 func CancelBookReservation(c *gin.Context) {
