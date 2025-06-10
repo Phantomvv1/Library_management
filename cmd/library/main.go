@@ -2,17 +2,29 @@ package main
 
 import (
 	"net/http"
+	"time"
 
 	. "github.com/Phantomvv1/Library_management/internal/authentication"
 	. "github.com/Phantomvv1/Library_management/internal/books"
 	. "github.com/Phantomvv1/Library_management/internal/librarians"
 	. "github.com/Phantomvv1/Library_management/internal/reviews"
 	. "github.com/Phantomvv1/Library_management/internal/users"
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
 	r := gin.Default()
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"*"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
 	r.Any("/", func(c *gin.Context) { c.JSON(http.StatusOK, nil) })
 	r.GET("/users", GetUsers)
 	r.GET("/books", GetBooks)

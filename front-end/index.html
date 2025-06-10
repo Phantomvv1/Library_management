@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<title>Front-end</title>
+	<style>
+		body {
+			font-family: Arial, sans-serif;
+			background: #f4f4f4;
+			display: flex;
+			flex-direction: column;
+			align-items: center;
+			justify-content: flex-start;
+			min-height: 100vh;
+			margin: 0;
+			padding: 20px;
+		}
+
+		h1 {
+			margin-bottom: 20px;
+		}
+
+		.input-group {
+			display: flex;
+			gap: 10px;
+			margin-bottom: 10px;
+			flex-wrap: wrap;
+			justify-content: center;
+		}
+
+		input[type="text"],
+		select {
+			padding: 10px;
+			font-size: 16px;
+			border: 1px solid #ccc;
+			border-radius: 4px;
+		}
+
+		input[type="text"] {
+			width: 300px;
+		}
+
+		button {
+			padding: 10px 20px;
+			font-size: 16px;
+			background-color: #007bff;
+			border: none;
+			color: white;
+			border-radius: 4px;
+			cursor: pointer;
+		}
+
+		button:hover {
+			background-color: #0056b3;
+		}
+
+		textarea {
+			width: 80%;
+			max-width: 800px;
+			height: 150px;
+			margin-top: 10px;
+			font-size: 14px;
+			font-family: monospace;
+			padding: 10px;
+			border: 1px solid #ccc;
+			border-radius: 4px;
+		}
+
+		#result {
+			margin-top: 30px;
+			width: 80%;
+			max-width: 800px;
+			white-space: pre-wrap;
+			background-color: #fff;
+			border: 1px solid #ccc;
+			padding: 20px;
+			border-radius: 4px;
+			overflow-x: auto;
+		}
+	</style>
+</head>
+
+<body>
+	<h1>Front-end</h1>
+	<div class="input-group">
+		<select id="methodSelect" onchange="toggleRequestBody()">
+			<option value="GET">GET</option>
+			<option value="POST">POST</option>
+			<option value="PUT">PUT</option>
+			<option value="DELETE">DELETE</option>
+		</select>
+		<input type="text" id="urlInput" placeholder="Enter API URL..." />
+		<button onclick="sendRequest()">Send</button>
+	</div>
+
+	<textarea id="requestBody" placeholder="Enter JSON body here..." style="display:none;"></textarea>
+
+	<div id="result"></div>
+
+	<script>
+		function toggleRequestBody() {
+			const method = document.getElementById("methodSelect").value;
+			const bodyField = document.getElementById("requestBody");
+			if (["POST", "PUT", "DELETE"].includes(method)) {
+				bodyField.style.display = "block";
+			} else {
+				bodyField.style.display = "none";
+			}
+		}
+
+		async function sendRequest() {
+			const url = document.getElementById("urlInput").value;
+			const method = document.getElementById("methodSelect").value;
+			const bodyText = document.getElementById("requestBody").value;
+			const resultDiv = document.getElementById("result");
+
+			resultDiv.innerText = "Sending request...";
+
+			let options = {
+				method: method,
+				headers: {}
+			};
+
+			if (["POST", "PUT", "DELETE"].includes(method)) {
+				try {
+					const parsed = JSON.parse(bodyText);
+					options.headers['Content-Type'] = 'application/json';
+					options.body = JSON.stringify(parsed);
+				} catch (err) {
+					resultDiv.innerText = "Invalid JSON in request body.";
+					return;
+				}
+			}
+
+			try {
+				const response = await fetch(url, options);
+				const status = response.status;
+
+				let json;
+				try {
+					json = await response.json();
+				} catch (e) {
+					json = {message: "Response is not JSON or is empty."};
+				}
+
+				resultDiv.innerText = `Method: ${method}\nStatus: ${status}\n\nResponse:\n${JSON.stringify(json, null, 2)}`;
+			} catch (error) {
+				resultDiv.innerText = `Error: ${error.message}`;
+			}
+		}
+	</script>
+</body>
+
+</html>
